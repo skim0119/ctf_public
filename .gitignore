@@ -1,3 +1,6 @@
 *.xml
 *.iml
 *.egg
+
+.DS_Store
+__pycache__
