@@ -56,12 +56,12 @@ class PolicyGen:
         if free_map is not None: self.free_map = free_map
         
         for idx,agent in enumerate(agent_list):
-            a = self.patrol(agent, idx, observation)
+            a = self.patrol(agent, idx, observation) # determine action for each agent?
             action_out.append(a)
         
         return action_out
 
-    def patrol(self, agent, index, obs):
+    def patrol(self, agent, index, obs): 
         """Generate 1 action for given agent object."""
         x,y = agent.get_loc()
         action = 0

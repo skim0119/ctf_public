@@ -47,7 +47,7 @@ class PolicyGen:
             action_out (list): list of integers as actions selected for team.
         """
         action_out = []
-        
+
         for i in agent_list:
             action_out.append(self.random.randint(0, 5)) # choose random action
         
