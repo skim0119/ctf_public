@@ -1,4 +1,4 @@
-"""Random agents policy generator.
+"""Simple agents policy generator.
 
 This module demonstrates an example of a simple heuristic policy generator
 for Capture the Flag environment.
@@ -6,6 +6,9 @@ for Capture the Flag environment.
 
 DOs/Denis Osipychev
     http://www.denisos.com
+    
+Last Modified : 8/30/18
+By : Seung Hyun Kim
 """
 
 import numpy as np
