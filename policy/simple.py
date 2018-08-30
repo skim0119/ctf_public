@@ -145,7 +145,7 @@ class PolicyGen:
         """
         This function returns the dictionary of locations for each element by its type.
             key : field element (int)
-            value : list of location ( (x,y) tuple )
+            value : list of element's coordinate ( (x,y) tuple )
         """
 
         objects = defaultdict(list)
