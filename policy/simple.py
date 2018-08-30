@@ -73,7 +73,8 @@ class PolicyGen:
         """ Policy
 
         This method generate an action for given agent.
-        Agent is given with limited vision of a field. This method provides simple protocol of movement based on the agent's location and it's vision.
+        Agent is given with limited vision of a field.
+        This method provides simple protocol of movement based on the agent's location and it's vision.
 
         Protocol : 
             1. Deterministic situation (in order of priority) :
