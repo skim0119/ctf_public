@@ -65,7 +65,7 @@ class PolicyGen:
         for idx, agent in enumerate(agent_list):
             action = self.policy(agent,observation, idx)
             action_out.append(action)
-            self.previous_move[idx] = action
+            self.previous_move[idx] = action # save previous action
 
         return action_out
 
@@ -84,8 +84,8 @@ class PolicyGen:
                 - Wall : 
                     - Change the direction
             2. Non-deterministic situation :
-                - move in the same direction as it was before. (but not 0)
-                - Move in the random direction (25% exploration rate)
+                - Move in the previous direction (straight forward). (85%)
+                - Move in the random direction (15% exploration rate)
         """
 
         # Expand the observation with 3-thickness wall
