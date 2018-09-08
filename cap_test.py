@@ -5,7 +5,7 @@ import numpy as np
 
 # the modules that you can use to generate the policy.
 import policy.patrol 
-#import policy.random
+import policy.random
 import policy.simple # custon written policy
 
 start_time = time.time()
@@ -19,8 +19,8 @@ total_score = 0
 observation = env.reset(map_size=20,
                         render_mode="env",
                         policy_blue=policy.patrol.PolicyGen(env.get_map, env.get_team_blue),
-                        #policy_red=policy.random.PolicyGen(env.get_map, env.get_team_red))
-                        policy_red=policy.simple.PolicyGen(env.get_map, env.get_team_red))
+                        policy_red=policy.random.PolicyGen(env.get_map, env.get_team_red))
+                        #policy_red=policy.simple.PolicyGen(env.get_map, env.get_team_red))
 
 while True:
     while not done:
