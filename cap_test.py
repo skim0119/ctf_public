@@ -7,6 +7,7 @@ import numpy as np
 import policy.patrol 
 import policy.random
 import policy.simple # custon written policy
+import policy.policy_RL1
 
 start_time = time.time()
 env = gym.make("cap-v0") # initialize the environment
@@ -16,10 +17,12 @@ t = 0
 total_score = 0
 
 # reset the environment and select the policies for each of the team
+                        policy_blue=policy.patrol.PolicyGen(env.get_map, env.get_team_blue),
+                        policy_red=policy.policy_RL1.PolicyGen(env.get_map, env.get_team_red))
 observation = env.reset(map_size=20,
                         render_mode="env",
-                        policy_blue=policy.random.PolicyGen(env.get_map, env.get_team_blue),
-                        policy_red=policy.simple.PolicyGen(env.get_map, env.get_team_red))
+                        policy_blue=policy_blue,
+                        policy_red=policy_red)
                         #policy_red=policy.simple.PolicyGen(env.get_map, env.get_team_red))
 
 while True:
