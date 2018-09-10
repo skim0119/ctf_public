@@ -7,7 +7,7 @@ import numpy as np
 import policy.patrol 
 import policy.random
 import policy.simple # custon written policy
-import policy.policy_RL1
+import policy.policy_RL
 
 start_time = time.time()
 env = gym.make("cap-v0") # initialize the environment
@@ -17,11 +17,12 @@ t = 0
 total_score = 0
 
 # reset the environment and select the policies for each of the team
-policy_blue = policy.patrol.PolicyGen(env.get_map, env.get_team_blue)
-policy_red  = policy.policy_RL1.PolicyGen(env.get_map, env.get_team_red)
+#policy_blue = policy.random.PolicyGen(env.get_map, env.get_team_blue)
+policy_red  = policy.random.PolicyGen(env.get_map, env.get_team_red)
+#policy_blue = policy.random.PolicyGen(env.get_map, env.get_team_blue)
 observation = env.reset(map_size=20,
                         render_mode="env",
-                        policy_blue=policy_blue,
+#                        policy_blue=policy_blue,
                         policy_red=policy_red)
                         #policy_red=policy.simple.PolicyGen(env.get_map, env.get_team_red))
 
@@ -34,11 +35,11 @@ while True:
         # and the apply the selected action to blue team
         # or use the policy selected and provided in env.reset 
         #action = env.action_space.sample()  # choose random action
-        #action = policy_blue.gen_action(env.team1,observation,map_only=env.team_home)
-        #action = [0, 0, 0, 0]
-        #observation, reward, done, info = env.step(action)
+        #action = policy_blue.gen_action(env.get_team_blue,observation)
+        action = [0, 0, 0, 0]
+        observation, reward, done, info = env.step(action)
         
-        observation, reward, done, info = env.step()  # feedback from environment
+        #observation, reward, done, info = env.step()  # feedback from environment
         
         # render and sleep are not needed for score analysis
         env.render(mode="fast")
