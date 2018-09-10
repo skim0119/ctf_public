@@ -104,7 +104,7 @@ class PolicyGen:
         action_out = []
 
         for idx, agent in enumerate(agent_list):
-            action_out.append(self.policy(agent, observation, idx)
-            #action_out.append(self.random.randint(0, 5)) # choose random action
-        
+            action_out.append(self.policy(agent, observation, idx))
+            
+
         return action_out
