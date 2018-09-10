@@ -1,0 +1,6 @@
+model_checkpoint_path: "ctf_policy.ckpt-823"
+all_model_checkpoint_paths: "ctf_policy.ckpt-423"
+all_model_checkpoint_paths: "ctf_policy.ckpt-523"
+all_model_checkpoint_paths: "ctf_policy.ckpt-623"
+all_model_checkpoint_paths: "ctf_policy.ckpt-723"
+all_model_checkpoint_paths: "ctf_policy.ckpt-823"
