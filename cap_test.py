@@ -9,6 +9,8 @@ import policy.random
 import policy.simple # custon written policy
 import policy.policy_RL
 
+import tensorflow as tf
+
 start_time = time.time()
 env = gym.make("cap-v0") # initialize the environment
 
@@ -16,41 +18,41 @@ done = False
 t = 0
 total_score = 0
 
-# reset the environment and select the policies for each of the team
-#policy_blue = policy.random.PolicyGen(env.get_map, env.get_team_blue)
-policy_red  = policy.random.PolicyGen(env.get_map, env.get_team_red)
-policy_blue = policy.policy_RL.PolicyGen(env.get_map, env.get_team_blue)
-observation = env.reset(map_size=20,
-                        render_mode="env",
-#                        policy_blue=policy_blue,
-                        policy_red=policy_red)
-                        #policy_red=policy.simple.PolicyGen(env.get_map, env.get_team_red))
-
-while True:
-    while not done:
-        
-        #you are free to select a random action
-        # or generate an action using the policy
-        # or select an action manually
-        # and the apply the selected action to blue team
-        # or use the policy selected and provided in env.reset 
-        #action = env.action_space.sample()  # choose random action
-        action = policy_blue.gen_action(env.get_team_blue,observation)
-        #action = [0, 0, 0, 0]
-        observation, reward, done, info = env.step(action)
-        
-        #observation, reward, done, info = env.step()  # feedback from environment
-        
-        # render and sleep are not needed for score analysis
-        env.render(mode="fast")
-        time.sleep(.05)
-        
-        t += 1
-        if t == 100000:
-            break
-        
-    total_score += reward
-    env.reset()
-    done = False
-    print("Total time: %s s, score: %s" % ((time.time() - start_time),total_score))
+with tf.Session() as sess:
+    # reset the environment and select the policies for each of the team
+    #policy_blue = policy.random.PolicyGen(env.get_map, env.get_team_blue)
+    policy_red  = policy.random.PolicyGen(env.get_map, env.get_team_red)
+    policy_blue = policy.policy_RL.PolicyGen(env.get_map, env.get_team_blue,sess)
+    observation = env.reset(map_size=20,
+                            render_mode="env",
+    #                        policy_blue=policy_blue,
+                            policy_red=policy_red)
+                            #policy_red=policy.simple.PolicyGen(env.get_map, env.get_team_red))
+    while True:
+        while not done:
+            
+            #you are free to select a random action
+            # or generate an action using the policy
+            # or select an action manually
+            # and the apply the selected action to blue team
+            # or use the policy selected and provided in env.reset 
+            #action = env.action_space.sample()  # choose random action
+            action = policy_blue.gen_action(env.get_team_blue,observation,sess)
+            #action = [0, 0, 0, 0]
+            observation, reward, done, info = env.step(action)
+            
+            #observation, reward, done, info = env.step()  # feedback from environment
+            
+            # render and sleep are not needed for score analysis
+            env.render(mode="fast")
+            time.sleep(.05)
+            
+            t += 1
+            if t == 100000:
+                break
+            
+        total_score += reward
+        env.reset()
+        done = False
+        print("Total time: %s s, score: %s" % ((time.time() - start_time),total_score))
 
