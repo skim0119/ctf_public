@@ -79,21 +79,6 @@ class PolicyGen:
                         height = reorder[vision[i][j]]
                         ret[idx][i][j][height] = 1
         return ret
-
-    def policy(self, agent, obs):
-        """ Policy
-            This method generate an action for given agent.
-            Agent is given with limited vision of a field.
-            Action is driven from pre-learned network.
-            Network will not update for an action.
-        """
-        # Run Graph
-        view = self.one_hot_encoder(obs, agent)
-        a = self.sess.run(self.action, feed_dict={self.state:view}).tolist()
-        #a = np.random.choice(a_dist[0],p=a_dist[0])
-        #a = np.argmax(a_dist == a)
-
-        return a
         
     def gen_action(self, agent_list, observation, free_map=None):
         """Action generation method.
@@ -113,6 +98,8 @@ class PolicyGen:
             The graph is not updated in this session. It only returns action for given input.
         """
 
-        action_out = self.policy(agent_list, observation)
+        view = self.one_hot_encoder(observation, agent_list)
+        ap = self.sess.run(self.action, feed_dict={self.state:view})
+        action_out = [np.random.choice(5, p=ap[x]/sum(ap[x])) for x in range(len(agent_list))]
 
         return action_out
