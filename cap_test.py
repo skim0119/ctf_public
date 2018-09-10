@@ -19,7 +19,7 @@ total_score = 0
 # reset the environment and select the policies for each of the team
 #policy_blue = policy.random.PolicyGen(env.get_map, env.get_team_blue)
 policy_red  = policy.random.PolicyGen(env.get_map, env.get_team_red)
-#policy_blue = policy.random.PolicyGen(env.get_map, env.get_team_blue)
+policy_blue = policy.policy_RL.PolicyGen(env.get_map, env.get_team_blue)
 observation = env.reset(map_size=20,
                         render_mode="env",
 #                        policy_blue=policy_blue,
@@ -35,8 +35,8 @@ while True:
         # and the apply the selected action to blue team
         # or use the policy selected and provided in env.reset 
         #action = env.action_space.sample()  # choose random action
-        #action = policy_blue.gen_action(env.get_team_blue,observation)
-        action = [0, 0, 0, 0]
+        action = policy_blue.gen_action(env.get_team_blue,observation)
+        #action = [0, 0, 0, 0]
         observation, reward, done, info = env.step(action)
         
         #observation, reward, done, info = env.step()  # feedback from environment

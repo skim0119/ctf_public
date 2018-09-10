@@ -13,7 +13,7 @@ Last Modified:
 """
 
 import numpy as np
-import tensorflow as tp
+import tensorflow as tf
 
 
 class PolicyGen:
@@ -41,13 +41,15 @@ class PolicyGen:
 
         self.sess = tf.Session()
 
-        model_dir= './../model'
-        self.ckpt = tf.train.get_checkpoint_state(model_dir)
+        model_dir= './model'
+        ckpt = tf.train.get_checkpoint_state(model_dir)
         if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
-            self.saver = tf.train.import_meta_graph('ckpt.model_checkpoint_path');
-            #saver.restore(sess, tf.train.latest_checkpoint('./'))
-            saver.restore(sess, ckpt.model_checkpoint_path)
+            self.saver = tf.train.import_meta_graph(ckpt.model_checkpoint_path+'.meta');
+            self.saver.restore(self.sess, ckpt.model_checkpoint_path)
             print('Graph is succesfully loaded.')
+
+            op = self.sess.graph.get_operations()
+            print([m.values() for m in op][0:5])
         else:
             print('Error : Graph is not loaded')
             return
@@ -56,30 +58,42 @@ class PolicyGen:
         self.state = self.graph.get_tensor_by_name("state:0")
         self.action = self.graph.get_tensor_by_name("action:0")
 
-    def policy(self, agent, obs, agent_id):
-        """ Policy
-        This method generate an action for given agent.
-        Agent is given with limited vision of a field.
-        Action is driven from pre-learned network.
-        Network will not update for an action.
-        """
+    def one_hot_encoder(self, state, agents):
+        ret = np.zeros((len(agents),5,5,8))
+        reorder = {0:0, 1:1, 2:2, 4:3, 6:4, 7:5, 8:6, 9:7}
+
         # Expand the observation with 3-thickness wall
         # - in order to avoid dealing with the boundary
-        obsx, obsy = obs.shape
-        _obs = np.ones((obsx+6, obsy+6)) * 8
-        _obs[3:3+obsx, 3:3+obsy] = obs
-        obs = _obs
+        sx, sy = state.shape
+        _state = np.ones((sx+6, sy+6)) * 8 # 8 for obstacle
+        _state[3:3+sx, 3:3+sy] = state
+        state = _state
 
-        # Initialize Variables
-        x, y = agent.get_loc()
-        x += 3
-        y += 3
-        view = obs[x-2:x+3, y-2:y+3] # limited view for the agent
+        for idx,agent in enumerate(agents):
+            # Initialize Variables
+            x, y = agent.get_loc()
+            x += 3
+            y += 3
+            vision = state[x-2:x+3, y-2:y+3] # limited view for the agent (5x5)
+            for i in range(len(vision)):
+                for j in range(len(vision[0])):
+                    if vision[i][j] != -1:
+                        height = reorder[vision[i][j]]
+                        ret[idx][i][j][height] = 1
+        return ret
 
+    def policy(self, agent, obs):
+        """ Policy
+            This method generate an action for given agent.
+            Agent is given with limited vision of a field.
+            Action is driven from pre-learned network.
+            Network will not update for an action.
+        """
         # Run Graph
-        a_dist = self.sess(self.action, feed_dict={self.input:[view]})
-        a = np.random.choice(a_dist[0],p=a_dist[0])
-        a = np.argmax(a_dist == a)
+        view = self.one_hot_encoder(obs, agent).tolist()
+        a = self.sess(self.action, feed_dict={self.state:view}).tolist()
+        #a = np.random.choice(a_dist[0],p=a_dist[0])
+        #a = np.argmax(a_dist == a)
 
         return a
         
@@ -101,10 +115,6 @@ class PolicyGen:
             The graph is not updated in this session. It only returns action for given input.
         """
 
-        action_out = []
-
-        for idx, agent in enumerate(agent_list):
-            action_out.append(self.policy(agent, observation, idx))
-            
+        action_out = self.policy(agent_list, observation)
 
         return action_out
