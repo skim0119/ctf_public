@@ -26,7 +26,7 @@ class PolicyGen:
         gen_action: Required method to generate a list of actions.
     """
     
-    def __init__(self, free_map, agent_list):
+    def __init__(self, free_map, agent_list, sess):
         """Constuctor for policy class.
         
         This class can be used as a template for policy generator.
@@ -39,17 +39,15 @@ class PolicyGen:
         Initiate session
         """
 
-        self.sess = tf.Session()
+        #self.sess = tf.Session()
+        self.sess = sess
 
         model_dir= './model'
         ckpt = tf.train.get_checkpoint_state(model_dir)
         if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
             self.saver = tf.train.import_meta_graph(ckpt.model_checkpoint_path+'.meta');
             self.saver.restore(self.sess, ckpt.model_checkpoint_path)
-            print('Graph is succesfully loaded.')
-
-            op = self.sess.graph.get_operations()
-            print([m.values() for m in op][0:5])
+            print('Graph is succesfully loaded.', ckpt.model_checkpoint_path)
         else:
             print('Error : Graph is not loaded')
             return
@@ -90,8 +88,8 @@ class PolicyGen:
             Network will not update for an action.
         """
         # Run Graph
-        view = self.one_hot_encoder(obs, agent).tolist()
-        a = self.sess(self.action, feed_dict={self.state:view}).tolist()
+        view = self.one_hot_encoder(obs, agent)
+        a = self.sess.run(self.action, feed_dict={self.state:view}).tolist()
         #a = np.random.choice(a_dist[0],p=a_dist[0])
         #a = np.argmax(a_dist == a)
 
