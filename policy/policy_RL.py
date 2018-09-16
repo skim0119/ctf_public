@@ -57,27 +57,30 @@ class PolicyGen:
         self.action = self.graph.get_tensor_by_name("action:0")
 
     def one_hot_encoder(self, state, agents):
-        ret = np.zeros((len(agents),5,5,8))
-        reorder = {0:0, 1:1, 2:2, 4:3, 6:4, 7:5, 8:6, 9:7}
+        ret = np.zeros((len(agents),7,7,5))
+        # team 1 : (1), team 2 : (-1)
+        map_channel = {-1:0, 0:1, 1:1, 2:2, 4:2, 3:3, 5:3, 6:4, 7:4, 8:5}
+        map_color   = {-1:0, 0:1, 2:1, 3:1, 6:1, 1:-1, 4:-1, 5:-1, 7:-1, 8:1}
+        #reorder = {0:0, 1:1, 2:2, 4:3, 6:4, 7:5, 8:6, 9:7} # CHANGE
 
         # Expand the observation with 3-thickness wall
         # - in order to avoid dealing with the boundary
         sx, sy = state.shape
-        _state = np.ones((sx+6, sy+6)) * 8 # 8 for obstacle
-        _state[3:3+sx, 3:3+sy] = state
+        _state = np.ones((sx+8, sy+8)) * 8 # 8 for obstacle
+        _state[4:4+sx, 4:4+sy] = state
         state = _state
 
         for idx,agent in enumerate(agents):
             # Initialize Variables
             x, y = agent.get_loc()
-            x += 3
-            y += 3
-            vision = state[x-2:x+3, y-2:y+3] # limited view for the agent (5x5)
+            x += 4
+            y += 4
+            vision = state[x-3:x+4, y-3:y+4] # limited view for the agent (5x5)
             for i in range(len(vision)):
                 for j in range(len(vision[0])):
                     if vision[i][j] != -1:
-                        height = reorder[vision[i][j]]
-                        ret[idx][i][j][height] = 1
+                        channel = map_channel[vision[i][j]]
+                        ret[idx][i][j][channel] = map_color[vision[i][j]]
         return ret
         
     def gen_action(self, agent_list, observation, free_map=None):
@@ -99,6 +102,7 @@ class PolicyGen:
         """
 
         view = self.one_hot_encoder(observation, agent_list)
+        print(observation)
         ap = self.sess.run(self.action, feed_dict={self.state:view})
         action_out = [np.random.choice(5, p=ap[x]/sum(ap[x])) for x in range(len(agent_list))]
 
