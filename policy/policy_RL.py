@@ -57,10 +57,10 @@ class PolicyGen:
         self.action = self.graph.get_tensor_by_name("action:0")
 
     def one_hot_encoder(self, state, agents):
-        ret = np.zeros((len(agents),7,7,5))
+        ret = np.zeros((len(agents),7,7,6))
         # team 1 : (1), team 2 : (-1)
-        map_channel = {-1:0, 0:1, 1:1, 2:2, 4:2, 3:3, 5:3, 6:4, 7:4, 8:5}
-        map_color   = {-1:0, 0:1, 2:1, 3:1, 6:1, 1:-1, 4:-1, 5:-1, 7:-1, 8:1}
+        map_channel = {-1:0, 0:1, 1:1, 2:2, 4:2, 3:3, 5:3, 6:4, 7:4, 8:5, 9:0}
+        map_color   = {-1:0, 0:1, 2:1, 3:1, 6:1, 1:-1, 4:-1, 5:-1, 7:-1, 8:1, 9:0}
         #reorder = {0:0, 1:1, 2:2, 4:3, 6:4, 7:5, 8:6, 9:7} # CHANGE
 
         # Expand the observation with 3-thickness wall
@@ -102,7 +102,6 @@ class PolicyGen:
         """
 
         view = self.one_hot_encoder(observation, agent_list)
-        print(observation)
         ap = self.sess.run(self.action, feed_dict={self.state:view})
         action_out = [np.random.choice(5, p=ap[x]/sum(ap[x])) for x in range(len(agent_list))]
 
