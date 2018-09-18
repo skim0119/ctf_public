@@ -105,5 +105,6 @@ class PolicyGen:
         ap = self.sess.run(self.action, feed_dict={self.state:view})
         print(ap)
         action_out = [np.random.choice(5, p=ap[x]/sum(ap[x])) for x in range(len(agent_list))]
+        print(action_out)
 
         return action_out
