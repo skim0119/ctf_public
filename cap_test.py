@@ -25,9 +25,11 @@ with tf.Session() as sess:
     policy_blue = policy.policy_RL.PolicyGen(env.get_map, env.get_team_blue,sess)
     observation = env.reset(map_size=20,
                             render_mode="env",
-    #                        policy_blue=policy_blue,
+                            policy_blue=policy_blue,
                             policy_red=policy_red)
                             #policy_red=policy.simple.PolicyGen(env.get_map, env.get_team_red))
+
+    pre_score = 0;
     while True:
         while not done:
             
@@ -37,11 +39,12 @@ with tf.Session() as sess:
             # and the apply the selected action to blue team
             # or use the policy selected and provided in env.reset 
             #action = env.action_space.sample()  # choose random action
-            action = policy_blue.gen_action(env.get_team_blue,observation,sess)
             #action = [0, 0, 0, 0]
-            observation, reward, done, info = env.step(action)
+            #observation, reward, done, info = env.step(action)
             
-            #observation, reward, done, info = env.step()  # feedback from environment
+            observation, reward, done, info = env.step()  # feedback from environment
+            print(reward-pre_score, ' ',done)
+            pre_score = reward;
             
             # render and sleep are not needed for score analysis
             env.render(mode="fast")
