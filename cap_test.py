@@ -28,6 +28,8 @@ with tf.Session() as sess:
                             policy_blue=policy_blue,
                             policy_red=policy_red)
                             #policy_red=policy.simple.PolicyGen(env.get_map, env.get_team_red))
+
+    pre_score = 0;
     while True:
         while not done:
             
@@ -41,6 +43,8 @@ with tf.Session() as sess:
             #observation, reward, done, info = env.step(action)
             
             observation, reward, done, info = env.step()  # feedback from environment
+            print(reward-pre_score, ' ',done)
+            pre_score = reward;
             
             # render and sleep are not needed for score analysis
             env.render(mode="fast")
