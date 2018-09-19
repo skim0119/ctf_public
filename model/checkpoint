@@ -1,0 +1,3 @@
+model_checkpoint_path: "ctf_policy.ckpt-6"
+all_model_checkpoint_paths: "ctf_policy.ckpt-0"
+all_model_checkpoint_paths: "ctf_policy.ckpt-6"
