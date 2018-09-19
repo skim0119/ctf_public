@@ -101,8 +101,10 @@ class PolicyGen:
             The graph is not updated in this session. It only returns action for given input.
         """
 
+        print(observation)
         view = self.one_hot_encoder(observation, agent_list)
         ap = self.sess.run(self.action, feed_dict={self.state:view}) # Action Probability
+        print(ap)
         action_out = [np.random.choice(5, p=ap[x]/sum(ap[x])) for x in range(len(agent_list))]
 
         return action_out
