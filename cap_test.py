@@ -44,8 +44,8 @@ with tf.Session() as sess:
             #observation, reward, done, info = env.step(action)
             
             observation, reward, done, info = env.step()  # feedback from environment
-            print(reward-pre_score, ' ',done)
-            pre_score = reward;
+            #print(reward-pre_score, ' ',done)
+            #pre_score = reward;
             
             # render and sleep are not needed for score analysis
             env.render(mode="fast")
@@ -55,7 +55,7 @@ with tf.Session() as sess:
             if t == 100000:
                 break
             
-        total_score += reward
+        #total_score += reward
         env.reset()
         done = False
-        print("Total time: %s s, score: %s" % ((time.time() - start_time),total_score))
+        #print("Total time: %s s, score: %s" % ((time.time() - start_time),total_score))
