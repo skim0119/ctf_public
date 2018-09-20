@@ -9,6 +9,5 @@ gym_cap.egg-info/top_level.txt
 gym_cap/envs/__init__.py
 gym_cap/envs/agent.py
 gym_cap/envs/cap_env.py
-gym_cap/envs/cap_view2d.py
 gym_cap/envs/const.py
 gym_cap/envs/create_map.py
