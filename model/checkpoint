@@ -1,0 +1,6 @@
+model_checkpoint_path: "ctf_policy.ckpt-2226"
+all_model_checkpoint_paths: "ctf_policy.ckpt-1900"
+all_model_checkpoint_paths: "ctf_policy.ckpt-2000"
+all_model_checkpoint_paths: "ctf_policy.ckpt-2100"
+all_model_checkpoint_paths: "ctf_policy.ckpt-2200"
+all_model_checkpoint_paths: "ctf_policy.ckpt-2226"
