@@ -1,6 +1,0 @@
-model_checkpoint_path: "ctf_policy.ckpt-2599"
-all_model_checkpoint_paths: "ctf_policy.ckpt-2214"
-all_model_checkpoint_paths: "ctf_policy.ckpt-2314"
-all_model_checkpoint_paths: "ctf_policy.ckpt-2414"
-all_model_checkpoint_paths: "ctf_policy.ckpt-2514"
-all_model_checkpoint_paths: "ctf_policy.ckpt-2599"
