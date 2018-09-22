@@ -1,0 +1,6 @@
+model_checkpoint_path: "ctf_policy.ckpt-4191"
+all_model_checkpoint_paths: "ctf_policy.ckpt-3794"
+all_model_checkpoint_paths: "ctf_policy.ckpt-3894"
+all_model_checkpoint_paths: "ctf_policy.ckpt-3994"
+all_model_checkpoint_paths: "ctf_policy.ckpt-4094"
+all_model_checkpoint_paths: "ctf_policy.ckpt-4191"
