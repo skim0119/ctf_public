@@ -1,0 +1,6 @@
+model_checkpoint_path: "ctf_policy.ckpt-2805"
+all_model_checkpoint_paths: "ctf_policy.ckpt-2405"
+all_model_checkpoint_paths: "ctf_policy.ckpt-2505"
+all_model_checkpoint_paths: "ctf_policy.ckpt-2605"
+all_model_checkpoint_paths: "ctf_policy.ckpt-2705"
+all_model_checkpoint_paths: "ctf_policy.ckpt-2805"
