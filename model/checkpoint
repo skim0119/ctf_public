@@ -1,3 +1,4 @@
-model_checkpoint_path: "ctf_policy.ckpt-1318"
-all_model_checkpoint_paths: "ctf_policy.ckpt-1218"
-all_model_checkpoint_paths: "ctf_policy.ckpt-1318"
+model_checkpoint_path: "ctf_policy.ckpt-16726"
+all_model_checkpoint_paths: "ctf_policy.ckpt-16526"
+all_model_checkpoint_paths: "ctf_policy.ckpt-16626"
+all_model_checkpoint_paths: "ctf_policy.ckpt-16726"
