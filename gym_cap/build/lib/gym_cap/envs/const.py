@@ -1,12 +1,10 @@
-
-
 # TeamConst
 """ Defining the constants for agents and teams """
 RED = 10
 BLUE = 50
 GRAY = 90
 NUM_BLUE = 5
-NUM_RED = 4
+NUM_RED = 0
 NUM_UAV = 0
 NUM_GRAY = 10
 UAV_STEP = 3
