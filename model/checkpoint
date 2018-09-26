@@ -1,3 +1,5 @@
-model_checkpoint_path: "ctf_policy.ckpt-203"
+model_checkpoint_path: "ctf_policy.ckpt-403"
 all_model_checkpoint_paths: "ctf_policy.ckpt-103"
 all_model_checkpoint_paths: "ctf_policy.ckpt-203"
+all_model_checkpoint_paths: "ctf_policy.ckpt-303"
+all_model_checkpoint_paths: "ctf_policy.ckpt-403"
