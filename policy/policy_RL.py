@@ -82,7 +82,7 @@ class PolicyGen:
                        3:3, 5:3, # UAV, does not need to be included for now
                        TEAM1_FL:4, TEAM2_FL:4,
                        OBSTACLE:5}
-        map_color   = {UNKNOWN:0, DEAD:0, OBSTACLE:0,
+        map_color   = {UNKNOWN:1, DEAD:0, OBSTACLE:1,
                        TEAM1_BG:1, TEAM2_BG:-1,
                        TEAM1_AG:1, TEAM2_AG:-1,
                        3:1, 5:-1, # UAV, does not need to be included for now
