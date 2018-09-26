@@ -32,6 +32,7 @@ with tf.Session() as sess:
 
     pre_score = 0;
     while True:
+        t=0
         while not done:
             
             #you are free to select a random action
@@ -49,11 +50,11 @@ with tf.Session() as sess:
             #pre_score = reward;
             
             # render and sleep are not needed for score analysis
-            env.render(mode="fast")
-            time.sleep(.01)
-            
             t += 1
-            if t == 2000:
+            env.render(mode="fast")
+            time.sleep(.04)
+            
+            if t >= 100:
                 break
             
         #total_score += reward
