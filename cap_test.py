@@ -3,9 +3,8 @@ import gym
 import gym_cap
 import numpy as np
 
-
 # the modules that you can use to generate the policy.
-import policy.roomba
+import policy.patrol 
 import policy.random
 import policy.simple # custon written policy
 import policy.policy_RL
@@ -17,7 +16,7 @@ env = gym.make("cap-v0") # initialize the environment
 
 done = False
 t = 0
-rscore = [0] * 20
+total_score = 0
 
 with tf.Session() as sess:
     # reset the environment and select the policies for each of the team
@@ -60,4 +59,5 @@ with tf.Session() as sess:
         #total_score += reward
         env.reset()
         done = False
-        #print("Total time: %s s, score: %s" % ((time.time() - start_time),total_score))
+
+        print("Total time: %s s, score: %s" % ((time.time() - start_time),total_score))
