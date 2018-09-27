@@ -14,6 +14,23 @@ Last Modified:
 
 import numpy as np
 import tensorflow as tf
+import gym_cap.envs.const as CONST
+
+UNKNOWN  = CONST.UNKNOWN # -1
+TEAM1_BG = CONST.TEAM1_BACKGROUND # 0
+TEAM2_BG = CONST.TEAM2_BACKGROUND # 1
+TEAM1_AG = CONST.TEAM1_UGV # 2
+TEAM2_AG = CONST.TEAM2_UGV # 4
+TEAM1_FL = CONST.TEAM1_FLAG # 6
+TEAM2_FL = CONST.TEAM2_FLAG # 7
+OBSTACLE = CONST.OBSTACLE # 8
+DEAD     = CONST.DEAD # 9
+SELECTED = CONST.SELECTED # 10
+COMPLETED= CONST.COMPLETED # 11
+
+VISION_RANGE = 10 #CONST.UGV_RANGE
+VISION_dX    = 2*VISION_RANGE+1
+VISION_dY    = 2*VISION_RANGE+1
 
 
 class PolicyGen:
@@ -47,35 +64,43 @@ class PolicyGen:
         if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
             self.saver = tf.train.import_meta_graph(ckpt.model_checkpoint_path+'.meta');
             self.saver.restore(self.sess, ckpt.model_checkpoint_path)
+
+            self.graph = tf.get_default_graph()
+            self.state = self.graph.get_tensor_by_name("state:0")
+            self.action = self.graph.get_tensor_by_name("action:0")
             print('Graph is succesfully loaded.', ckpt.model_checkpoint_path)
         else:
             print('Error : Graph is not loaded')
             return
 
-        self.graph = tf.get_default_graph()
-        self.state = self.graph.get_tensor_by_name("state:0")
-        self.action = self.graph.get_tensor_by_name("action:0")
-
     def one_hot_encoder(self, state, agents):
-        ret = np.zeros((len(agents),7,7,6))
-        # team 1 : (1), team 2 : (-1)
-        map_channel = {-1:0, 0:1, 1:1, 2:2, 4:2, 3:3, 5:3, 6:4, 7:4, 8:5, 9:0}
-        map_color   = {-1:0, 0:1, 2:1, 3:1, 6:1, 1:-1, 4:-1, 5:-1, 7:-1, 8:1, 9:0}
-        #reorder = {0:0, 1:1, 2:2, 4:3, 6:4, 7:5, 8:6, 9:7} # CHANGE
-
+        ret = np.zeros((len(agents),VISION_dX,VISION_dY,6))
+        # team 1 : (1), team 2 : (-1), map elements: (0)
+        map_channel = {UNKNOWN:0, DEAD:0,
+                       TEAM1_BG:1, TEAM2_BG:1,
+                       TEAM1_AG:2, TEAM2_AG:2,
+                       3:3, 5:3, # UAV, does not need to be included for now
+                       TEAM1_FL:4, TEAM2_FL:4,
+                       OBSTACLE:5}
+        map_color   = {UNKNOWN:1, DEAD:0, OBSTACLE:1,
+                       TEAM1_BG:1, TEAM2_BG:-1,
+                       TEAM1_AG:1, TEAM2_AG:-1,
+                       3:1, 5:-1, # UAV, does not need to be included for now
+                       TEAM1_FL:1, TEAM2_FL:-1}
+        
         # Expand the observation with 3-thickness wall
         # - in order to avoid dealing with the boundary
         sx, sy = state.shape
-        _state = np.ones((sx+8, sy+8)) * 8 # 8 for obstacle
-        _state[4:4+sx, 4:4+sy] = state
+        _state = np.ones((sx+2*VISION_RANGE, sy+2*VISION_RANGE)) * OBSTACLE # 8 for obstacle
+        _state[VISION_RANGE:VISION_RANGE+sx, VISION_RANGE:VISION_RANGE+sy] = state
         state = _state
 
         for idx,agent in enumerate(agents):
             # Initialize Variables
             x, y = agent.get_loc()
-            x += 4
-            y += 4
-            vision = state[x-3:x+4, y-3:y+4] # limited view for the agent (5x5)
+            x += VISION_RANGE
+            y += VISION_RANGE
+            vision = state[x-VISION_RANGE:x+VISION_RANGE+1,y-VISION_RANGE:y+VISION_RANGE+1] # extract the limited view for the agent (5x5)
             for i in range(len(vision)):
                 for j in range(len(vision[0])):
                     if vision[i][j] != -1:
@@ -101,10 +126,10 @@ class PolicyGen:
             The graph is not updated in this session. It only returns action for given input.
         """
 
+        #print(observation)
         view = self.one_hot_encoder(observation, agent_list)
-        ap = self.sess.run(self.action, feed_dict={self.state:view})
-        print(ap)
+        ap = self.sess.run(self.action, feed_dict={self.state:view}) # Action Probability
+        #print(ap)
         action_out = [np.random.choice(5, p=ap[x]/sum(ap[x])) for x in range(len(agent_list))]
-        print(action_out)
 
         return action_out
