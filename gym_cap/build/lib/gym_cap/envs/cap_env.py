@@ -99,6 +99,8 @@ class CapEnv(gym.Env):
 
         if NUM_RED == 0:
             self.mode = "sandbox"
+        else:
+            self.mode = mode
 
         self.game_lost = False
         self.game_won = False
