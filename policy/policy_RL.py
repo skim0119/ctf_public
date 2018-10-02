@@ -9,7 +9,7 @@ DOs/Denis Osipychev
 
 Last Modified:
     Seung Hyun Kim
-    created : Sat Sep  8 19:38:43 2018
+    created : Sat Sep  30 2018
 """
 
 import numpy as np
@@ -126,10 +126,8 @@ class PolicyGen:
             The graph is not updated in this session. It only returns action for given input.
         """
 
-        #print(observation)
         view = self.one_hot_encoder(observation, agent_list)
-        ap = self.sess.run(self.action, feed_dict={self.state:view}) # Action Probability
-        #print(ap)
-        action_out = [np.random.choice(5, p=ap[x]/sum(ap[x])) for x in range(len(agent_list))]
+        action_prob = self.sess.run(self.action, feed_dict={self.state:view}) # Action Probability
+        action_out = [np.random.choice(5, p=action_prob[x]/sum(action_prob[x])) for x in range(len(agent_list))]
 
         return action_out
