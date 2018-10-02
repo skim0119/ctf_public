@@ -60,4 +60,4 @@ with tf.Session() as sess:
         env.reset()
         done = False
 
-        print("Total time: %s s, score: %s" % ((time.time() - start_time),total_score))
+        print("Total time: %s s, score: %s" % ((time.time() - start_time),reward))
