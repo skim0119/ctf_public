@@ -9,8 +9,6 @@ import policy.random
 import policy.simple # custon written policy
 import policy.policy_RL
 
-import tensorflow as tf
-
 start_time = time.time()
 env = gym.make("cap-v0") # initialize the environment
 
@@ -20,20 +18,17 @@ total_score = 0
 
 with tf.Session() as sess:
     # reset the environment and select the policies for each of the team
-    #policy_blue = policy.random.PolicyGen(env.get_map, env.get_team_blue)
     policy_red  = policy.random.PolicyGen(env.get_map, env.get_team_red)
-    policy_blue = policy.policy_RL.PolicyGen(env.get_map, env.get_team_blue,sess)
+    policy_blue = policy.policy_RL.PolicyGen(env.get_map, env.get_team_blue)
     observation = env.reset(map_size=20,
                             render_mode="env",
                             policy_blue=policy_blue,
                             policy_red=policy_red)
-                            #policy_red=policy.simple.PolicyGen(env.get_map, env.get_team_red))
 
     pre_score = 0;
     while True:
         t=0
         while not done:
-            
             #you are free to select a random action
             # or generate an action using the policy
             # or select an action manually
