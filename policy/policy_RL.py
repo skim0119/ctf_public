@@ -38,11 +38,11 @@ class PolicyGen:
         Initialize TensorFlow Graph
         Initiate session
         """
-        self.model_dir= './model'
+        self.model_dir= './model/NO_RED_01_CTRL:'
         self.sess = tf.Session()
         #self.sess = sess
 
-        ckpt = tf.train.get_checkpoint_state(model_dir)
+        ckpt = tf.train.get_checkpoint_state(self.model_dir)
         if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
             self.saver = tf.train.import_meta_graph(ckpt.model_checkpoint_path+'.meta');
             self.saver.restore(self.sess, ckpt.model_checkpoint_path)
@@ -52,8 +52,8 @@ class PolicyGen:
             self.action = self.graph.get_tensor_by_name("action:0")
             print('Graph is succesfully loaded.', ckpt.model_checkpoint_path)
         else:
+            raise NameError
             print('Error : Graph is not loaded')
-            return
 
     def gen_action(self, agent_list, observation, free_map=None):
         """Action generation method.
