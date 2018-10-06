@@ -1,4 +1,5 @@
 import numpy as np
+import tensorflow as tf
 import gym_cap.envs.const as CONST
 
 UNKNOWN  = CONST.UNKNOWN # -1
@@ -49,13 +50,18 @@ def one_hot_encoder(state, agents):
         y += VISION_RANGE
         vision = state[x-VISION_RANGE:x+VISION_RANGE+1,y-VISION_RANGE:y+VISION_RANGE+1] # extract the limited view for the agent
         
+        # FULL MATRIX OPERATION
         for channel, val in map_color.items():
-            if not val: # if val == 0, calculation is un-necessary
-                if val == 1:
-                    ret[idx,:,:,map_channel[channel]] += (vision == obj).astype(np.int32)
-                elif val == -1:
-                    ret[idx,:,:,map_channel[channel]] -= (vision == obj).astype(np.int32)
-        
+            if val == 1:
+                ret[idx,:,:,map_channel[channel]] += (vision == channel).astype(np.int32)
+            elif val == -1:
+                ret[idx,:,:,map_channel[channel]] -= (vision == channel).astype(np.int32)
+                
+        '''for i in range(len(vision)):
+            for j in range(len(vision[0])):
+                if vision[i][j] != -1:
+                    channel = map_channel[vision[i][j]]
+                    ret[idx][i][j][channel] = map_color[vision[i][j]]'''
     return ret
 
 if __name__ == '__main__':
@@ -70,3 +76,4 @@ if __name__ == '__main__':
         if _ % 100 == 0 and _ != 0:
             print(_)
         one_hot_encoder(s, env.get_team_blue)
+    print('finish testing for one-hot-encoder')
