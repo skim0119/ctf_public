@@ -47,7 +47,7 @@ while True:
         env.render(mode="fast")
         time.sleep(.04)
         
-        if t >= 100:
+        if t >= 300:
             break
         
     #total_score += reward
