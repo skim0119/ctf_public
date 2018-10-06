@@ -38,7 +38,7 @@ class PolicyGen:
         Initialize TensorFlow Graph
         Initiate session
         """
-        self.model_dir= './model/NO_RED_01_CTRL:'
+        self.model_dir= './model/NO_RED_04_EXPBF_only'
         self.sess = tf.Session()
         #self.sess = sess
 
