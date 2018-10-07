@@ -38,7 +38,8 @@ class PolicyGen:
         Initialize TensorFlow Graph
         Initiate session
         """
-        self.model_dir= './model/NO_RED_04_EXPBF_only'
+
+        self.model_dir = './model/NO_RED_02_RMS3/'
         self.sess = tf.Session()
         #self.sess = sess
 
@@ -75,6 +76,10 @@ class PolicyGen:
 
         view = one_hot_encoder(observation, agent_list)
         action_prob = self.sess.run(self.action, feed_dict={self.state:view}) # Action Probability
-        action_out = [np.random.choice(5, p=action_prob[x]/sum(action_prob[x])) for x in range(len(agent_list))]
+
+        #action_out = [np.random.choice(5, p=action_prob[x]/sum(action_prob[x])) for x in range(len(agent_list))]
+        print(action_prob)
+        action_out = np.argmax(action_prob, axis=1).tolist()
+        print(action_out)
 
         return action_out
