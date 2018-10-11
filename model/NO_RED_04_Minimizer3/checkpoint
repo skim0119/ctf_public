@@ -1,0 +1,6 @@
+model_checkpoint_path: "ctf_policy.ckpt-3700"
+all_model_checkpoint_paths: "ctf_policy.ckpt-3300"
+all_model_checkpoint_paths: "ctf_policy.ckpt-3400"
+all_model_checkpoint_paths: "ctf_policy.ckpt-3500"
+all_model_checkpoint_paths: "ctf_policy.ckpt-3600"
+all_model_checkpoint_paths: "ctf_policy.ckpt-3700"
