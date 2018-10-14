@@ -1,0 +1,6 @@
+model_checkpoint_path: "ctf_policy.ckpt-8010"
+all_model_checkpoint_paths: "ctf_policy.ckpt-4010"
+all_model_checkpoint_paths: "ctf_policy.ckpt-5010"
+all_model_checkpoint_paths: "ctf_policy.ckpt-6010"
+all_model_checkpoint_paths: "ctf_policy.ckpt-7010"
+all_model_checkpoint_paths: "ctf_policy.ckpt-8010"
