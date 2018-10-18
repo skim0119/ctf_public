@@ -44,14 +44,10 @@ while True:
         
         # render and sleep are not needed for score analysis
         t += 1
-        env.render(mode="fast")
-        time.sleep(.04)
-        
-        if t >= 300:
+        if t == 100:
             break
-        
-    #total_score += reward
+
     env.reset()
     done = False
-
-    print("Total time: %s s, score: %s" % ((time.time() - start_time),reward))
+    print("Time: %.2f s, rscore: %.2f" %
+        ((time.time() - start_time),reward))
