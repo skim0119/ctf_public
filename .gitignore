@@ -9,6 +9,7 @@ __pycache__/
 # Archived
 #
 archive/
+archive_*/
 *.lprof
 model_archives
 *.xml
