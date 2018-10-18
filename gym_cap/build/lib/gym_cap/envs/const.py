@@ -6,11 +6,11 @@ GRAY = 90
 NUM_BLUE = 1
 NUM_RED = 0
 NUM_UAV = 0
-NUM_GRAY = 10
+NUM_GRAY = 0
 UAV_STEP = 3
 UGV_STEP = 1
 UAV_RANGE = 4
-UGV_RANGE = 10#3
+UGV_RANGE = 3
 UAV_A_RANGE = 0
 UGV_A_RANGE = 2
 
@@ -47,6 +47,7 @@ OBSTACLE = 8
 DEAD = 9
 SELECTED = 10
 COMPLETED = 11
+TEAM3_UGV = 15
 
 COLOR_DICT = {UNKNOWN : (200, 200, 200),
               TEAM1_BACKGROUND : (0, 0, 120),
@@ -58,6 +59,7 @@ COLOR_DICT = {UNKNOWN : (200, 200, 200),
               TEAM1_FLAG : (0, 255, 255),
               TEAM2_FLAG : (255, 255, 0),
               OBSTACLE : (120, 120, 120),
+              TEAM3_UGV : (180, 180, 180),
               DEAD : (0, 0, 0),
               SELECTED : (122, 77, 25),
               BLACK : (0, 0, 0),
