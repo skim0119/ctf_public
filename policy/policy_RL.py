@@ -39,7 +39,7 @@ class PolicyGen:
         Initiate session
         """
 
-        self.model_dir = './model/NO_RED_02_RMS3/'
+        self.model_dir = './model/B1R2_AC_MonteCarlo_10/'
         self.sess = tf.Session()
         #self.sess = sess
 
@@ -49,7 +49,7 @@ class PolicyGen:
             self.saver.restore(self.sess, ckpt.model_checkpoint_path)
 
             self.graph = tf.get_default_graph()
-            self.state = self.graph.get_tensor_by_name("state:0")
+            self.state = self.graph.get_tensor_by_name("holders/state:0")
             self.action = self.graph.get_tensor_by_name("action:0")
             print('Graph is succesfully loaded.', ckpt.model_checkpoint_path)
         else:
@@ -77,9 +77,9 @@ class PolicyGen:
         view = one_hot_encoder(observation, agent_list)
         action_prob = self.sess.run(self.action, feed_dict={self.state:view}) # Action Probability
 
-        #action_out = [np.random.choice(5, p=action_prob[x]/sum(action_prob[x])) for x in range(len(agent_list))]
-        print(action_prob)
-        action_out = np.argmax(action_prob, axis=1).tolist()
-        print(action_out)
+        action_out = [np.random.choice(5, p=action_prob[x]/sum(action_prob[x])) for x in range(len(agent_list))]
+        #print(action_prob)
+        #action_out = np.argmax(action_prob, axis=1).tolist()
+        #print(action_out)
 
         return action_out

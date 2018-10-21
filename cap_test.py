@@ -44,7 +44,7 @@ while True:
         
         # render and sleep are not needed for score analysis
         t += 1
-        if t == 100:
+        if t == 200:
             break
 
     env.reset()
