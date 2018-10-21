@@ -6,7 +6,7 @@ class CreateMap:
     given dimension size, number of obstacles,
     and number of agents for each team"""
 
-    def gen_map(name, dim=20, in_seed=None, rand_zones=False,
+    def gen_map(name, dim=20, in_seed=None, rand_zones=True,
                 map_obj=[NUM_BLUE, NUM_UAV, NUM_RED, NUM_UAV, NUM_GRAY]):
         """
         Parameters
