@@ -70,7 +70,7 @@ class Experience_buffer():
             random.shuffle(self.buffer)
             
         i = min(len(self.buffer), size)
-        batch = np.reshape(np.array(self.buffer[:i]), [size,4])
+        batch = np.reshape(np.array(self.buffer[:i]), [i,self.experience_shape])
         self.buffer = self.buffer[i:]
         return batch 
         
