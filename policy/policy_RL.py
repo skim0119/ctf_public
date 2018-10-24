@@ -1,6 +1,10 @@
-"""Random agents policy generator.
+""" Reinforce Learning Policy Generator
 
-This module demonstrates an example of a simple heuristic policy generator
+This module calls any pre-trained tensorflow model and generates the policy.
+It includes method to switch between the network and weights. 
+
+For use: generate policy to simulate along with CTF environment.
+
 for Capture the Flag environment.
     http://github.com/osipychev/missionplanner/
 
@@ -9,7 +13,7 @@ DOs/Denis Osipychev
 
 Last Modified:
     Seung Hyun Kim
-    created : Sat Sep  30 2018
+    created :Wed Oct 24 12:21:34 CDT 2018
 """
 
 import numpy as np
@@ -19,17 +23,16 @@ from DataModule import one_hot_encoder
 class PolicyGen:
     """Policy generator class for CtF env.
     
-    This class can be used as a template for policy generator.
     Designed to summon an AI logic for the team of units.
     
     Methods:
-        gen_action: Required method to generate a list of actions.
+        gen_action  : Required method to generate a list of actions.
+        load_model  : Load pre-defined model (*.meta file). Only TensorFlow model supported
+        load_weight : Load/reload weight to the model. 
     """
     
-    def __init__(self, free_map, agent_list):
+    def __init__(self, free_map, agent_list, model_dir='./model/B2R2_VANILLA'):
         """Constuctor for policy class.
-        
-        This class can be used as a template for policy generator.
         
         Args:
             free_map (np.array): 2d map of static environment.
@@ -39,22 +42,13 @@ class PolicyGen:
         Initiate session
         """
 
-        self.model_dir = './model/B1R2_AC_MonteCarlo_10/'
+        # Switches 
+        self.deterministic = False
+        self.full_observation = True
+
         self.sess = tf.Session()
-        #self.sess = sess
-
-        ckpt = tf.train.get_checkpoint_state(self.model_dir)
-        if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
-            self.saver = tf.train.import_meta_graph(ckpt.model_checkpoint_path+'.meta');
-            self.saver.restore(self.sess, ckpt.model_checkpoint_path)
-
-            self.graph = tf.get_default_graph()
-            self.state = self.graph.get_tensor_by_name("holders/state:0")
-            self.action = self.graph.get_tensor_by_name("action:0")
-            print('Graph is succesfully loaded.', ckpt.model_checkpoint_path)
-        else:
-            raise NameError
-            print('Error : Graph is not loaded')
+        self.reset_network()
+        self.model_dir = model_dir # Default
 
     def gen_action(self, agent_list, observation, free_map=None):
         """Action generation method.
@@ -71,15 +65,44 @@ class PolicyGen:
             action_out (list): list of integers as actions selected for team.
 
         Note:
-            The graph is not updated in this session. It only returns action for given input.
+            The graph is not updated in this session.
+            It only returns action for given input.
         """
 
-        view = one_hot_encoder(observation, agent_list)
-        action_prob = self.sess.run(self.action, feed_dict={self.state:view}) # Action Probability
+        obs = one_hot_encoder(observation, agent_list)
+        action_prob = self.sess.run(self.action, feed_dict={self.state:obs}) # Action Probability
 
-        action_out = [np.random.choice(5, p=action_prob[x]/sum(action_prob[x])) for x in range(len(agent_list))]
-        #print(action_prob)
-        #action_out = np.argmax(action_prob, axis=1).tolist()
-        #print(action_out)
+        # If the policy is deterministic policy, return the argmax
+        # The parameter can be changed with set_deterministic(bool)
+        if self.deterministic:
+            action_out = np.argmax(action_prob, axis=1).tolist()
+        else: 
+            action_out = [np.random.choice(5, p=action_prob[x]/sum(action_prob[x])) for x in range(len(agent_list))]
 
         return action_out
+    
+    def reset_network(self, input_name = "holders/state:0", output_name = "action:0", 
+                    model_dir=None):
+        if model_dir:
+            self.model_dir = model_dir
+        
+        # Reset the weight to the newest saved weight.
+        tf.reset_default_graph()
+        ckpt = tf.train.get_checkpoint_state(self.model_dir)
+        if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
+            self.saver = tf.train.import_meta_graph(ckpt.model_checkpoint_path+'.meta');
+            self.saver.restore(self.sess, ckpt.model_checkpoint_path)
+
+            self.graph = tf.get_default_graph()
+            self.state = self.graph.get_tensor_by_name("holders/state:0")
+            self.action = self.graph.get_tensor_by_name("action:0")
+            print('Graph is succesfully loaded.', ckpt.model_checkpoint_path)
+        else:
+            raise NameError
+            print('Error : Graph is not loaded')
+
+    def set_directory(self, model_dir):
+        self.model_dir = model_dir
+
+    def set_deterministic(self, bool b):
+        self.deterministic = b
