@@ -104,5 +104,5 @@ class PolicyGen:
     def set_directory(self, model_dir):
         self.model_dir = model_dir
 
-    def set_deterministic(self, bool b):
+    def set_deterministic(self, b):
         self.deterministic = b
