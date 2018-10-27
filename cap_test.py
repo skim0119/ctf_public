@@ -49,5 +49,5 @@ while True:
 
     env.reset()
     done = False
-    print("Time: %.2f s, rscore: %.2f" %
+    print("Time: %.2f s, score: %.2f" %
         ((time.time() - start_time),reward))
