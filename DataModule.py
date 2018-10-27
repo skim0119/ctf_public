@@ -14,57 +14,9 @@ DEAD     = CONST.DEAD # 9
 SELECTED = CONST.SELECTED # 10
 COMPLETED= CONST.COMPLETED # 11
 
-VISION_RANGE = 10 #CONST.UGV_RANGE # Regardless, the vision will be 20x20
-VISION_dX    = 2*VISION_RANGE+1
-VISION_dY    = 2*VISION_RANGE+1
-
-#@profile
-def one_hot_encoder2(state, agents):
-    ret = np.zeros((len(agents),VISION_dX,VISION_dY,6))
-
-    # team 1 : (1), team 2 : (-1), map elements: (0)
-    map_channel = {UNKNOWN:0, DEAD:0,
-                   TEAM1_BG:1, TEAM2_BG:1,
-                   TEAM1_AG:2, TEAM2_AG:2,
-                   3:3, 5:3, # UAV, does not need to be included for now
-                   TEAM1_FL:4, TEAM2_FL:4,
-                   OBSTACLE:5}
-    map_color   = {UNKNOWN:1, DEAD:0, 
-                   TEAM1_BG:0, TEAM2_BG:1,
-                   TEAM1_AG:0, TEAM2_AG:1,
-                   3:0, 5:0, # UAV, does not need to be included for now
-                   TEAM1_FL:0, TEAM2_FL:1,
-                   OBSTACLE:1}
-    
-    # Expand the observation with 3-thickness wall
-    # - in order to avoid dealing with the boundary
-    sx, sy = state.shape
-    _state = np.full((sx+2*VISION_RANGE, sy+2*VISION_RANGE),OBSTACLE)
-    _state[VISION_RANGE:VISION_RANGE+sx, VISION_RANGE:VISION_RANGE+sy] = state
-    state = _state
-
-    for idx,agent in enumerate(agents):
-        # Initialize Variables
-        x, y = agent.get_loc()
-        x += VISION_RANGE
-        y += VISION_RANGE
-        vision = state[x-VISION_RANGE:x+VISION_RANGE+1,y-VISION_RANGE:y+VISION_RANGE+1] # extract the limited view for the agent
-        
-        # FULL MATRIX OPERATION
-        for channel, val in map_color.items():
-            if val == 1:
-                ret[idx,:,:,map_channel[channel]] += (vision == channel).astype(np.int32)
-            elif val == -1:
-                ret[idx,:,:,map_channel[channel]] -= (vision == channel).astype(np.int32)
-                
-        '''for i in range(len(vision)):
-            for j in range(len(vision[0])):
-                if vision[i][j] != -1:
-                    channel = map_channel[vision[i][j]]
-                    ret[idx][i][j][channel] = map_color[vision[i][j]]'''
-    return ret
-
-def one_hot_encoder(state, agents):
+def one_hot_encoder(state, agents, VISION_RANGE=10):
+    VISION_dX    = 2*VISION_RANGE+1
+    VISION_dY    = 2*VISION_RANGE+1
     ret = np.zeros((len(agents),VISION_dX,VISION_dY,6))
 
     # team 1 : (1), team 2 : (-1), map elements: (0)
