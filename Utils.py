@@ -13,6 +13,9 @@ def discount_rewards(r, gamma, normalize=False):
         discounted_r = (discounted_r - np.mean(discounted_r)) / (np.std(discounted_r)+1e-8) # normalize
     return discounted_r
 
+def normalize(r):
+    return (r - np.mean(r)) / (np.std(r)+1e-8)
+
 class MovingAverage:
     def __init__(self, size):
         self.ma = 0.0
