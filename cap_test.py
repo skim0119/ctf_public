@@ -8,6 +8,7 @@ import policy.patrol
 import policy.random
 import policy.simple # custon written policy
 import policy.policy_RL
+import policy.zeros
 
 start_time = time.time()
 env = gym.make("cap-v0") # initialize the environment
@@ -17,10 +18,9 @@ t = 0
 total_score = 0
 
 # reset the environment and select the policies for each of the team
-policy_red  = policy.random.PolicyGen(env.get_map, env.get_team_red)
+policy_red  = policy.zeros.PolicyGen(env.get_map, env.get_team_red)
 policy_blue = policy.policy_RL.PolicyGen(env.get_map, env.get_team_blue)
-observation = env.reset(map_size=20,
-                        render_mode="env",
+observation = env.reset(map_size=10,
                         policy_blue=policy_blue,
                         policy_red=policy_red)
 
@@ -44,6 +44,7 @@ while True:
         
         # render and sleep are not needed for score analysis
         t += 1
+        env.render(mode="fast")
         if t == 200:
             break
 
