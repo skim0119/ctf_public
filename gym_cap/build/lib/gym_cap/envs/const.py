@@ -10,7 +10,7 @@ NUM_GRAY = 0
 UAV_STEP = 3
 UGV_STEP = 1
 UAV_RANGE = 4
-UGV_RANGE = 3
+UGV_RANGE = 5#3
 UAV_A_RANGE = 0
 UGV_A_RANGE = 2
 
@@ -19,7 +19,7 @@ RL_SUGGESTIONS = False
 
 STOCH_TRANSITIONS = False
 STOCH_ATTACK = True # False
-STOCH_ZONES = True
+STOCH_ZONES = False
 
 # MapConst
 """ Defining the constants for map and environment """
