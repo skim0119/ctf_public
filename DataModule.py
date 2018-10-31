@@ -14,7 +14,7 @@ DEAD     = CONST.DEAD # 9
 SELECTED = CONST.SELECTED # 10
 COMPLETED= CONST.COMPLETED # 11
 
-def one_hot_encoder(state, agents, VISION_RANGE=10):
+def one_hot_encoder(state, agents, VISION_RANGE=10, reverse=False):
     VISION_dX    = 2*VISION_RANGE+1
     VISION_dY    = 2*VISION_RANGE+1
     ret = np.zeros((len(agents),VISION_dX,VISION_dY,6))
@@ -26,13 +26,22 @@ def one_hot_encoder(state, agents, VISION_RANGE=10):
                    3:3, 5:3, # UAV, does not need to be included for now
                    TEAM1_FL:4, TEAM2_FL:4,
                    OBSTACLE:5}
-    map_color   = {UNKNOWN:1, DEAD:0, 
-                   TEAM1_BG:0, TEAM2_BG:1,
-                   TEAM1_AG:1, TEAM2_AG:-1,
-                   3:1, 5:-1, # UAV, does not need to be included for now
-                   TEAM1_FL:1, TEAM2_FL:-1,
-                   OBSTACLE:1}
-    
+    if not reverse:
+        map_color   = {UNKNOWN:1, DEAD:0, 
+                       TEAM1_BG:0, TEAM2_BG:1,
+                       TEAM1_AG:1, TEAM2_AG:-1,
+                       3:1, 5:-1, # UAV, does not need to be included for now
+                       TEAM1_FL:1, TEAM2_FL:-1,
+                       OBSTACLE:1}
+    else: # reverse color
+        map_color   = {UNKNOWN:1, DEAD:0, 
+                       TEAM1_BG:1, TEAM2_BG:0,
+                       TEAM1_AG:-1, TEAM2_AG:1,
+                       3:-1, 5:1, # UAV, does not need to be included for now
+                       TEAM1_FL:-1, TEAM2_FL:1,
+                       OBSTACLE:1}
+        
+
     # Expand the observation with 3-thickness wall
     # - in order to avoid dealing with the boundary
     sx, sy = state.shape
