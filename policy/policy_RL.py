@@ -31,7 +31,7 @@ class PolicyGen:
         load_weight : Load/reload weight to the model. 
     """
     
-    def __init__(self, free_map, agent_list, model_dir='./model/B4R4_Rzero_VANILLA'):
+    def __init__(self, free_map, agent_list, model_dir='./model/B4R4_Rzero_VANILLA', color='blue'):
         """Constuctor for policy class.
         
         Args:
@@ -45,11 +45,12 @@ class PolicyGen:
         # Switches 
         self.deterministic = False
         self.full_observation = True
-
+        self.is_blue = color == 'blue'
+        
         tf.reset_default_graph()
         self.sess = tf.Session()
         self.model_dir = model_dir # Default
-        self.reset_network(self.sess)
+        self.reset_network()
 
     def gen_action(self, agent_list, observation, free_map=None):
         """Action generation method.
@@ -70,7 +71,7 @@ class PolicyGen:
             It only returns action for given input.
         """
 
-        obs = one_hot_encoder(observation, agent_list, 5)
+        obs = one_hot_encoder(observation, agent_list, 5, reverse=!is_blue)
         action_prob = self.sess.run(self.action, feed_dict={self.state:obs}) # Action Probability
 
         # If the policy is deterministic policy, return the argmax
@@ -82,21 +83,22 @@ class PolicyGen:
 
         return action_out
     
-    def reset_network(self, sess, input_name = "state:0", output_name = "action:0"):
+    def reset_network(self, input_name = "state:0", output_name = "action:0"):
         # Reset the weight to the newest saved weight.
-        ckpt = tf.train.get_checkpoint_state(self.model_dir)
-        if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
-            print('path exist')
-            self.saver = tf.train.import_meta_graph(ckpt.model_checkpoint_path+'.meta');
-            self.saver.restore(sess, ckpt.model_checkpoint_path)
+        with self.sess as sess:
+            ckpt = tf.train.get_checkpoint_state(self.model_dir)
+            if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
+                print('path exist')
+                self.saver = tf.train.import_meta_graph(ckpt.model_checkpoint_path+'.meta');
+                self.saver.restore(sess, ckpt.model_checkpoint_path)
 
-            self.graph = tf.get_default_graph()
-            self.state = self.graph.get_tensor_by_name(input_name)
-            self.action = self.graph.get_tensor_by_name(output_name)
-            print('Graph is succesfully loaded.', ckpt.model_checkpoint_path)
-        else:
-            raise NameError
-            print('Error : Graph is not loaded')
+                self.graph = tf.get_default_graph()
+                self.state = self.graph.get_tensor_by_name(input_name)
+                self.action = self.graph.get_tensor_by_name(output_name)
+                print('Graph is succesfully loaded.', ckpt.model_checkpoint_path)
+            else:
+                raise NameError
+                print('Error : Graph is not loaded')
 
     def set_directory(self, model_dir):
         self.model_dir = model_dir
