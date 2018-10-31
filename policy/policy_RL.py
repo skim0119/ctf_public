@@ -31,7 +31,7 @@ class PolicyGen:
         load_weight : Load/reload weight to the model. 
     """
     
-    def __init__(self, free_map, agent_list, model_dir='./model/B4R4_Rzero_VANILLA'):
+    def __init__(self, free_map, agent_list, model_dir='./model/B4R4_Rzero_VANILLA', color='blue'):
         """Constuctor for policy class.
         
         Args:
@@ -45,7 +45,8 @@ class PolicyGen:
         # Switches 
         self.deterministic = False
         self.full_observation = True
-
+        self.is_blue = color == 'blue'
+        
         tf.reset_default_graph()
         self.sess = tf.Session()
         self.model_dir = model_dir # Default
@@ -70,7 +71,7 @@ class PolicyGen:
             It only returns action for given input.
         """
 
-        obs = one_hot_encoder(observation, agent_list, 5)
+        obs = one_hot_encoder(observation, agent_list, 5, reverse=!is_blue)
         action_prob = self.sess.run(self.action, feed_dict={self.state:obs}) # Action Probability
 
         # If the policy is deterministic policy, return the argmax
