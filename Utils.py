@@ -66,7 +66,10 @@ class Experience_buffer():
     def empty(self):
         return len(self.buffer)==0
     
-    def sample(self, size=2000):
+    def sample(self, size=2000, shuffle=False):
+        if shuffle:
+            random.shuffle(self.buffer)
+            
         if size > len(self.buffer):
             return np.array(self.buffer)
         else:
