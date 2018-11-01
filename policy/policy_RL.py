@@ -71,7 +71,7 @@ class PolicyGen:
             It only returns action for given input.
         """
 
-        obs = one_hot_encoder(observation, agent_list, 5, reverse=not self.is_blue)
+        obs = one_hot_encoder(observation, agent_list, self.input_shape, reverse=not self.is_blue)
         action_prob = self.sess.run(self.action, feed_dict={self.state:obs}) # Action Probability
 
         # If the policy is deterministic policy, return the argmax
@@ -94,6 +94,10 @@ class PolicyGen:
             self.graph = tf.get_default_graph()
             self.state = self.graph.get_tensor_by_name(input_name)
             self.action = self.graph.get_tensor_by_name(output_name)
+            try:
+                self.input_shape = sess.run(self.graph.get_tensor_by_name('input_shape'))[1]
+            except: KeyError
+                self.input_shape = 5
             print('Graph is succesfully loaded.', ckpt.model_checkpoint_path)
         else:
             raise NameError
