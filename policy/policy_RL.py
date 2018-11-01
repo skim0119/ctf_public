@@ -71,7 +71,7 @@ class PolicyGen:
             It only returns action for given input.
         """
 
-        obs = one_hot_encoder(observation, agent_list, 5, reverse=!is_blue)
+        obs = one_hot_encoder(observation, agent_list, 5, reverse=not self.is_blue)
         action_prob = self.sess.run(self.action, feed_dict={self.state:obs}) # Action Probability
 
         # If the policy is deterministic policy, return the argmax
@@ -85,20 +85,19 @@ class PolicyGen:
     
     def reset_network(self, input_name = "state:0", output_name = "action:0"):
         # Reset the weight to the newest saved weight.
-        with self.sess as sess:
-            ckpt = tf.train.get_checkpoint_state(self.model_dir)
-            if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
-                print('path exist')
-                self.saver = tf.train.import_meta_graph(ckpt.model_checkpoint_path+'.meta');
-                self.saver.restore(sess, ckpt.model_checkpoint_path)
+        ckpt = tf.train.get_checkpoint_state(self.model_dir)
+        if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
+            print('path exist')
+            self.saver = tf.train.import_meta_graph(ckpt.model_checkpoint_path+'.meta');
+            self.saver.restore(self.sess, ckpt.model_checkpoint_path)
 
-                self.graph = tf.get_default_graph()
-                self.state = self.graph.get_tensor_by_name(input_name)
-                self.action = self.graph.get_tensor_by_name(output_name)
-                print('Graph is succesfully loaded.', ckpt.model_checkpoint_path)
-            else:
-                raise NameError
-                print('Error : Graph is not loaded')
+            self.graph = tf.get_default_graph()
+            self.state = self.graph.get_tensor_by_name(input_name)
+            self.action = self.graph.get_tensor_by_name(output_name)
+            print('Graph is succesfully loaded.', ckpt.model_checkpoint_path)
+        else:
+            raise NameError
+            print('Error : Graph is not loaded')
 
     def set_directory(self, model_dir):
         self.model_dir = model_dir
