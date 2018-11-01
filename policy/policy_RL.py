@@ -95,8 +95,8 @@ class PolicyGen:
             self.state = self.graph.get_tensor_by_name(input_name)
             self.action = self.graph.get_tensor_by_name(output_name)
             try:
-                self.input_shape = sess.run(self.graph.get_tensor_by_name('input_shape'))[1]
-            except: KeyError
+                self.input_shape = sess.run(self.graph.get_tensor_by_name('input_shape'))[0]
+            except KeyError:
                 self.input_shape = 5
             print('Graph is succesfully loaded.', ckpt.model_checkpoint_path)
         else:
