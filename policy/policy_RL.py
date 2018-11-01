@@ -47,7 +47,6 @@ class PolicyGen:
         self.full_observation = True
         self.is_blue = color == 'blue'
         
-        tf.reset_default_graph()
         self.sess = tf.Session()
         self.model_dir = model_dir # Default
         self.reset_network()
@@ -95,9 +94,9 @@ class PolicyGen:
             self.state = self.graph.get_tensor_by_name(input_name)
             self.action = self.graph.get_tensor_by_name(output_name)
             try:
-                self.input_shape = self.sess.run(self.graph.get_tensor_by_name('Network_Param/input_shape'))[0]
+                self.input_shape = self.sess.run(self.graph.get_tensor_by_name('input_shape:0'))[0]
             except KeyError:
-                self.input_shape = 5
+                self.input_shape = 9
             print('Graph is succesfully loaded.', ckpt.model_checkpoint_path)
         else:
             raise NameError
