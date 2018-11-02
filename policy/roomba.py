@@ -133,7 +133,7 @@ class PolicyGen:
             elif fx < 2: # move right
                 action = 4
         elif not is_possible_to_move(self.previous_move[agent_id]): # Wall or other obstacle
-            action_pool = []
+            action_pool = [0]
             for movement in range(5):
                 if is_possible_to_move(movement):
                     action_pool.append(movement)
