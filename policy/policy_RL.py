@@ -18,7 +18,7 @@ Last Modified:
 
 import numpy as np
 import tensorflow as tf
-from DataModule import one_hot_encoder
+from utility.dataModule import one_hot_encoder
 
 class PolicyGen:
     """Policy generator class for CtF env.
