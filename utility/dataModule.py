@@ -14,7 +14,7 @@ DEAD     = CONST.DEAD # 9
 SELECTED = CONST.SELECTED # 10
 COMPLETED= CONST.COMPLETED # 11
 
-def one_hot_encoder(state, agents, VISION_RANGE=10, reverse=False):
+def one_hot_encoder(state, agents, VISION_RANGE=9, reverse=False):
     VISION_dX    = 2*VISION_RANGE+1
     VISION_dY    = 2*VISION_RANGE+1
     ret = np.zeros((len(agents),VISION_dX,VISION_dY,6))
