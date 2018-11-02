@@ -4,13 +4,14 @@ import random
 
 def discount_rewards(r, gamma, normalize=False):
     """ take 1D float numpy array of rewards and compute discounted reward """
+    if normalize:
+        r = (r - np.mean(r)) / (np.std(r)+1e-8) # normalize
     discounted_r = np.zeros_like(r)
     running_add = 0.0
     for t in reversed(range(r.size)):
         running_add = (running_add * gamma + r[t])
         discounted_r[t] = running_add
-    if normalize:
-        discounted_r = (discounted_r - np.mean(discounted_r)) / (np.std(discounted_r)+1e-8) # normalize
+
     return discounted_r
 
 def normalize(r):
