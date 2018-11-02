@@ -18,10 +18,8 @@ t = 0
 total_score = 0
 
 # reset the environment and select the policies for each of the team
-policy_red = policy.zeros.PolicyGen(env.get_map, env.get_team_red)
-policy_blue = policy.roomba.PolicyGen(env.get_map, env.get_team_blue)
-#policy_red  = policy.policy_RL.PolicyGen(env.get_map, env.get_team_red, model_dir='model/B4R4_self_VANILLA/',color='red')
-#policy_blue = policy.policy_RL.PolicyGen(env.get_map, env.get_team_blue, model_dir='model/B4R4_self_VANILLA/')
+policy_red  = policy.policy_RL.PolicyGen(env.get_map, env.get_team_red, model_dir='model/B4R4_self_VANILLA/',color='red')
+policy_blue = policy.policy_RL.PolicyGen(env.get_map, env.get_team_blue, model_dir='model/B4R4_self_VANILLA/')
 observation = env.reset(map_size=20,
                         policy_blue=policy_blue,
                         policy_red=policy_red)
