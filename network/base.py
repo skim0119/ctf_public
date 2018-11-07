@@ -1,6 +1,8 @@
 class bass():
-    def __init__(self):
-        pass
+    def __init__(self, global_step = None, initial_step = 0, scope):
+        self.global_step = global_step
+        with tf.name_scope(scope):
+            self.local_step = tf.Variable(initial_step, trainable=False, name='local_step')
 
     def build_train(self):
         pass
@@ -13,8 +15,8 @@ class bass():
 
     #Used to initialize weights for policy and value output layers
     def normalized_columns_initializer(std=1.0):
-            def _initializer(shape, dtype=None, partition_info=None):
-                        out = np.random.randn(*shape).astype(np.float32)
-                                out *= std / np.sqrt(np.square(out).sum(axis=0, keepdims=True))
-                                        return tf.constant(out)
-                                        return _initializer
+        def _initializer(shape, dtype=None, partition_info=None):
+            out = np.random.randn(*shape).astype(np.float32)
+                    out *= std / np.sqrt(np.square(out).sum(axis=0, keepdims=True))
+                            return tf.constant(out)
+                            return _initializer
