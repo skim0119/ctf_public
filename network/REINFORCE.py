@@ -1,5 +1,3 @@
-import os
-
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 import tensorflow.contrib.layers as layers
@@ -9,7 +7,7 @@ import random
 
 import base
 
-import utility.
+import utility
 
 class REINFORCE(base):
     ###
@@ -17,7 +15,7 @@ class REINFORCE(base):
     #
     ###
     def __init__(self, lr, in_size,action_size, grad_clip_norm, trainable=False, scope='main', board=True):
-        super().__init__()
+        super().__init__(scope=scope)
         
         # Set Parameters
         with tf.name_scope('Network_Param'):
@@ -29,7 +27,6 @@ class REINFORCE(base):
 
         ## Build tensorflow Graph
         with tf.name_scope(scope): 
-            self.local_step = tf.Variable(0, trainable=False, name='local_step') # local train iteration 
             self.build_network(scope)
             if trainable: build_train()
             if board: build_summary()
