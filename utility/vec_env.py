@@ -26,12 +26,14 @@ def worker(remote, env_wrapper, map_size, policy_red):
                 remote.send((ob, reward, done))
         elif cmd == 'reset':
             done = False
-            ob = env.reset(map_size=map_size, policy_red=policy_red)
+            ob = env.reset(map_size=map_size, policy_red=policy_red.PolicyGen(env.get_map, env.get_team_red))
             ob = env._env
             remote.send((ob, env.get_team_blue))
         elif cmd == 'close':
             remote.close()
             break
+        elif cmd == 'won':
+            remote.send(env.blue_win)
         elif cmd == 'render':
             pass
         elif cmd == 'renew':
@@ -51,12 +53,12 @@ class SubprocVecEnv:
     # Subprocess Vector Environment
     # https://github.com/openai/baselines/tree/master/baselines/a2c (source)
     # with some modificatoins
-    def __init__(self, nenvs, env_fns, map_size, initial_red):
+    def __init__(self, nenvs, env_fns, map_size, initial_reds):
         self.nenvs = nenvs
         
         self.remotes, self.work_remotes = zip(*[Pipe() for _ in range(nenvs)])
-        self.ps = [Process(target=worker, args=(work_remote, env_fn, map_size, initial_red))
-                   for (work_remote, env_fn) in zip(self.work_remotes, env_fns)]
+        self.ps = [Process(target=worker, args=(self.work_remotes[idx], env_fns[idx], map_size, initial_reds[idx]))
+                   for idx in range(nenvs)]
         for pidx, p in enumerate(self.ps):
             p.start()
             print(f"Process {pidx} Initiated")
@@ -74,6 +76,12 @@ class SubprocVecEnv:
         results = [remote.recv() for remote in self.remotes]
         obs, team = zip(*results)
         return np.stack(obs), np.stack(team)
+    
+    def won(self):
+        for remote in self.remotes:
+            remote.send(('won', None))
+        results = [remote.recv() for remote in self.remotes]
+        return np.stack(results)
 
     def close(self):
         for remote in self.remotes:
