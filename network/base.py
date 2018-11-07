@@ -1,6 +1,8 @@
 class bass():
-    def __init__(self):
-        pass
+    def __init__(self, global_step = None, initial_step = 0, scope):
+        self.global_step = global_step
+        with tf.name_scope(scope):
+            self.local_step = tf.Variable(initial_step, trainable=False, name='local_step')
 
     def build_train(self):
         pass
