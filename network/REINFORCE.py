@@ -5,37 +5,34 @@ import tensorflow.contrib.layers as layers
 import numpy as np
 import random
 
-import base
+from network.base import base
 
 import utility
 
 class REINFORCE(base):
     ###
-    # Inherite normalized_columns_initializer(std=1.0)
     #
     ###
     def __init__(self, lr, in_size,action_size, grad_clip_norm, trainable=False, scope='main', board=True):
-        super().__init__(scope=scope)
+        super(REINFORCE,self).__init__(in_size, action_size, grad_clip_norm, trainable)
         
         # Set Parameters
         with tf.name_scope('Network_Param'):
-            self.input_shape=tf.constant(np.array([VISION_dX,VISION_dY]), name='input_shape')
+            self.input_shape=tf.constant(in_size[1:3], name='input_shape')
             self.action_size = tf.constant(action_size, name='output_size')
-        
-        # Set Constants
-        self.grad_clip_norm=grad_clip_norm
 
         ## Build tensorflow Graph
         with tf.name_scope(scope): 
-            self.build_network(scope)
+            self.build_network()
             if trainable: build_train()
             if board: build_summary()
         
 
     def build_network(self):
         #These lines established the feed-forward part of the network. The agent takes a state and produces an action.
-        self.state_input = tf.placeholder(shape=in_size,dtype=tf.float32, name='state')
-        self.action_OH = tf.one_hot(self.action_holder, action_size)
+        self.state_input = tf.placeholder(shape=self.in_size,dtype=tf.float32, name='state')
+        self.action_holder = tf.placeholder(shape=[None],dtype=tf.int32, name='actions')
+        self.action_OH = tf.one_hot(self.action_holder, self.action_size)
         self.reward_holder = tf.placeholder(shape=[None],dtype=tf.float32, name='reward')
         
         ## Convolution Layer
@@ -59,7 +56,7 @@ class REINFORCE(base):
         layer = layers.fully_connected(layer, 128, 
                             weights_initializer=self.normalized_columns_initializer(0.001),
                             activation_fn=tf.nn.relu)
-        self.dense = layers.fully_connected(layer, action_size,
+        self.dense = layers.fully_connected(layer, self.action_size,
                             weights_initializer=self.normalized_columns_initializer(0.001),
                             activation_fn=None,
                             scope='output_fc')
