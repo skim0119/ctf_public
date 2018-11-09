@@ -14,18 +14,23 @@ class REINFORCE(base):
     #
     ###
     def __init__(self, lr, in_size,action_size, grad_clip_norm, trainable=False, scope='main', board=True):
-        super(REINFORCE,self).__init__(in_size, action_size, grad_clip_norm, trainable)
-        
+        #super(REINFORCE,self).__init__(in_size, action_size, grad_clip_norm, trainable)
+        self.in_size = in_size
+        self.action_size = action_size
+        self.grad_clip_norm = grad_clip_norm
+        self.trainable = trainable
+        self.lr = lr
+           
         # Set Parameters
         with tf.name_scope('Network_Param'):
             self.input_shape=tf.constant(in_size[1:3], name='input_shape')
-            self.action_size = tf.constant(action_size, name='output_size')
+            self.action_sizes = tf.constant(action_size, name='output_size')
 
         ## Build tensorflow Graph
         with tf.name_scope(scope): 
             self.build_network()
-            if trainable: build_train()
-            if board: build_summary()
+            if trainable: self.build_train()
+            if board: self.build_summary()
         
 
     def build_network(self):
@@ -58,8 +63,7 @@ class REINFORCE(base):
                             activation_fn=tf.nn.relu)
         self.dense = layers.fully_connected(layer, self.action_size,
                             weights_initializer=self.normalized_columns_initializer(0.001),
-                            activation_fn=None,
-                            scope='output_fc')
+                            activation_fn=None)
         self.output = tf.nn.softmax(self.dense, name='action')
 
     def build_train(self):
@@ -68,9 +72,9 @@ class REINFORCE(base):
             self.entropy = -tf.reduce_mean(self.output * tf.log(self.output+1e-8), name='entropy') # measure action diversity
             self.responsible_outputs = tf.reduce_sum(self.output * self.action_OH, 1)
             self.loss = -tf.reduce_sum(tf.log(self.responsible_outputs)*self.reward_holder)
-            self.optimizer = tf.train.AdamOptimizer(learning_rate=lr)
-            self.gradients = self.optimizer.compute_gradients(self.loss)
-            self.grads = [tf.clip_by_norm(grad, 50) for grad in self.gradients]
+            self.optimizer = tf.train.AdamOptimizer(learning_rate=self.lr)
+            self.grads = self.optimizer.compute_gradients(self.loss)
+            #self.grads = [tf.clip_by_norm(grad, 50) for grad in self.grads]
             
             with tf.name_scope('grad_holders'):
                 self.grad_holders = [(tf.Variable(var, trainable=False, dtype=tf.float32, name=var.op.name+'_buffer'), var) for var in tf.trainable_variables()]
