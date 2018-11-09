@@ -26,6 +26,9 @@ class MovingAverage:
         
     def __call__(self):
         return self.ma
+    
+    def tolist(self):
+        return list(self.queue)
 
     def extend(self, l:list):
         # Append list of numbers
