@@ -63,11 +63,6 @@ def one_hot_encoder(state, agents, VISION_RANGE=9, reverse=False):
             elif val == -1:
                 ret[idx,:,:,map_channel[channel]] -= (vision == channel).astype(np.int32)
                 
-        '''for i in range(len(vision)):
-            for j in range(len(vision[0])):
-                if vision[i][j] != -1:
-                    channel = map_channel[vision[i][j]]
-                    ret[idx][i][j][channel] = map_color[vision[i][j]]'''
     return ret
 
 if __name__ == '__main__':
