@@ -18,7 +18,7 @@ class ActorCritic(base):
                  lr_actor=1e-4,
                  lr_critic=1e-4,
                  grad_clip_norm = 0,
-                 global_step=0,
+                 global_step=None,
                  initial_step=0,
                  trainable = False,
                  lr_a_gamma = 1,
@@ -88,10 +88,7 @@ class ActorCritic(base):
                     self.objective_function = tf.log(self.policy_as) # objective function
                     self.exp_v = self.objective_function * self.advantage_holder + entropy_beta * self.entropy
                     self.actor_loss = tf.reduce_mean(-self.exp_v, name='actor_loss') # or reduce_sum
-                    
-                with tf.name_scope('choose_action'):
-                    self.action = tf.squeeze(tf.multinomial(self.actor, 1))
-
+                   
                 with tf.name_scope('local_grad'):
                     self.a_grads = tf.gradients(self.actor_loss, self.a_vars)
                     self.c_grads = tf.gradients(self.critic_loss, self.c_vars)
@@ -111,8 +108,8 @@ class ActorCritic(base):
                         self.update_a_op = self.actor_optimizer.apply_gradients(zip(self.a_grads, globalAC.a_vars))
                         self.update_c_op = self.critic_optimizer.apply_gradients(zip(self.c_grads, globalAC.c_vars))
 
-                self.build_summarizer()
-                self.summary_ = tf.summary.merge_all(scope=scope)
+        if scope != 'global':
+            self.build_summarizer()
     def build_network(self):
         layer = slim.conv2d(self.state_input, 32, [5,5], activation_fn=tf.nn.relu,
                             weights_initializer=layers.xavier_initializer_conv2d(),
@@ -149,14 +146,19 @@ class ActorCritic(base):
 
      # Update global network with local gradients
     def update_global(self, feed_dict):
-        self.sess.run([self.update_a_op, self.update_c_op], feed_dict)
+        al, cl, etrpy, _, __ = self.sess.run([self.actor_loss, self.critic_loss, self.entropy, self.update_a_op, self.update_c_op], feed_dict)
+        return al, cl, etrpy
+        #_,__,summary_str = self.sess.run([self.update_a_op, self.update_c_op, self.summary_loss], feed_dict)
+        #return summary_str
 
     def pull_global(self):
         self.sess.run([self.pull_a_vars_op, self.pull_c_vars_op])
 
      # action을 선택
     def choose_action(self, s):
-        return self.sess.run(self.action, {self.state_input: s})
+        a_probs = self.sess.run(self.actor, {self.state_input: s})
+        
+        return [np.random.choice(self.action_size, p=prob/sum(prob)) for prob in a_probs]
     
     def build_summarizer(self):
         # Summary
@@ -175,6 +177,7 @@ class ActorCritic(base):
             tf.summary.scalar(name='actor_loss', tensor=self.actor_loss)
             tf.summary.scalar(name='critic_loss', tensor=self.critic_loss)
             tf.summary.scalar(name='Entropy', tensor=self.entropy)
+        self.summary_loss = tf.summary.merge_all(scope='summary')
         
         with tf.name_scope('weights_bias'):
             # Histogram weights and bias
