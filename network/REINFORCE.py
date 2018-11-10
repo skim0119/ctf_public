@@ -29,32 +29,9 @@ class REINFORCE(base):
             self.action_sizes = tf.constant(action_size, name='output_size')
 
         ## Build tensorflow Graph
-        self.build_network()
-                
-        # Update Operations
-        if trainable:
-            with tf.name_scope(scope+'/train'):
-                self.entropy = -tf.reduce_mean(self.output * tf.log(self.output+1e-8), name='entropy') # measure action diversity
-                self.responsible_outputs = tf.reduce_sum(self.output * self.action_OH, 1)
-                self.loss = -tf.reduce_sum(tf.log(self.responsible_outputs)*self.reward_holder)
-                self.optimizer = tf.train.AdamOptimizer(learning_rate=self.lr)
-                self.grads = self.optimizer.compute_gradients(self.loss, tf.trainable_variables())
-                self.grads = [tf.clip_by_norm(grad, 50) for grad in self.grads]
-
-                with tf.name_scope('grad_holders'):
-                    self.grad_holders = [(tf.Variable(var, trainable=False, dtype=tf.float32, name=var.op.name+'_buffer'), var) for var in tf.trainable_variables()]
-                self.accumulate_gradient = tf.group([tf.assign_add(a[0],b[0]) for a,b in zip(self.grad_holders, self.grads)]) # add gradient to buffer
-                self.clear_batch = tf.group([tf.assign(a[0],a[0]*0.0) for a in self.grad_holders])
-                self.update_batch = self.optimizer.apply_gradients(self.grad_holders, self.local_step) ## update and increment step
-        if board:
-            self.build_summary()
-
-
-
-    def build_network(self):
         #These lines established the feed-forward part of the network. The agent takes a state and produces an action.
         self.state_input = tf.placeholder(shape=self.in_size,dtype=tf.float32, name='state')
-        self.action_holder = tf.placeholder(shape=[None],dtype=tf.int32, name='actions')
+        self.action_holder = tf.placeholder(shape=[None],dtype=tf.int32, name='action')
         self.action_OH = tf.one_hot(self.action_holder, self.action_size)
         self.reward_holder = tf.placeholder(shape=[None],dtype=tf.float32, name='reward')
         
@@ -76,20 +53,34 @@ class REINFORCE(base):
         layer = slim.flatten(layer)
 
         ## Fully Connected Layer
-        layer = layers.fully_connected(layer, 128, 
-                            weights_initializer=self.normalized_columns_initializer(0.001),
+        layer = layers.fully_connected(layer, 128,
                             activation_fn=tf.nn.relu)
-        self.dense = layers.fully_connected(layer, self.action_size,
-                            weights_initializer=self.normalized_columns_initializer(0.001),
-                            activation_fn=None)
-        self.output = tf.nn.softmax(self.dense, name='action')
+        self.output = layers.fully_connected(layer, self.action_size,
+                                            activation_fn=tf.nn.softmax,
+                                            scope='action')
+
+        # Update Operations
+        self.entropy = -tf.reduce_mean(self.output * tf.log(self.output+1e-8), name='entropy') # measure action diversity
+        self.responsible_outputs = tf.reduce_sum(self.output * self.action_OH, 1)
+        self.loss = -tf.reduce_mean(tf.log(self.responsible_outputs)*self.reward_holder)
+
+        self.optimizer = tf.train.AdamOptimizer(learning_rate=self.lr)
+        self.grads = self.optimizer.compute_gradients(self.loss)
+        self.grads = [tf.clip_by_norm(grad, 50) for grad in self.grads]
+
+        self.grad_holders = [(tf.Variable(var, trainable=False, dtype=tf.float32, name=var.op.name+'_buffer'), var) for var in tf.trainable_variables()]
+        self.accumulate_gradient = tf.group([tf.assign_add(a[0],b[0]) for a,b in zip(self.grad_holders, self.grads)]) # add gradient to buffer
+        self.clear_batch = tf.group([tf.assign(a[0],a[0]*0.0) for a in self.grad_holders])
+        self.update_batch = self.optimizer.apply_gradients(self.grad_holders) ## update and increment step
+
+        self.build_summary()
+
 
     def build_summary(self):
         # Summary
         # Histogram output
         with tf.variable_scope('debug_parameters'):
-            tf.summary.histogram('output', self.output)
-            tf.summary.histogram('actor', self.dense)     
+            tf.summary.histogram('output', self.output)   
             tf.summary.histogram('action', self.action_holder)
         
         # Graph summary Loss
@@ -104,6 +95,6 @@ class REINFORCE(base):
                 
         with tf.variable_scope('gradients'):
             # Histogram Gradients
-            for var, grad in zip(slim.get_model_variables(), self.gradients):
+            for var, grad in zip(slim.get_model_variables(), self.grads):
                 tf.summary.histogram(var.op.name+'/grad', grad[0])
 
