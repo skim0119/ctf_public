@@ -11,6 +11,7 @@ __pycache__/
 archive/
 archive_*
 logs/
+model/
 *.NS
 *.lprof
 model_archives
