@@ -155,7 +155,7 @@ class ActorCritic(base):
     def pull_global(self):
         self.sess.run([self.pull_a_vars_op, self.pull_c_vars_op])
 
-     # action을 선택
+     # Choose Action
     def choose_action(self, s):
         a_probs = self.sess.run(self.actor, {self.state_input: s})
         
