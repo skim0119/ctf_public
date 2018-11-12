@@ -9,6 +9,7 @@ from network.base import base
 
 import utility
 
+# implementation for centralized action and critic
 class MAActorCritic(base):
     def __init__(self,
                  in_size,
@@ -70,7 +71,6 @@ class MAActorCritic(base):
 
                 # global Network
                 # Build actor and critic network weights. (global network does not need training sequence)
-                common_layer_list=[]
                 for agent_id in range(self.num_agent):
                     # For each agent, build an action policy
                     with tf.name_scope('agent'+str(agent_id)):
@@ -78,10 +78,8 @@ class MAActorCritic(base):
                         self.state_input_list.append(state_input)
 
                         # get the parameters of actor and critic networks
-                        actor, common_layer, a_vars = self.build_actor_network(state_input)
-                        common_layer_list.append(common_layer)
-                
-                critic, c_vars = self.build_critic_network(tf.concat(common_layer_list, 1))
+                        actor, common_layer, a_vars = self.build_actor_network(state_input, agent_id)
+                        critic, c_vars = self.build_critic_network(common_layer, agent_id)
                 
 
                         # Local Network
@@ -92,62 +90,48 @@ class MAActorCritic(base):
                             td_target_holder = tf.placeholder(shape=[None], dtype=tf.float32, name='td_target_holder')
                             advantage_holder = tf.placeholder(shape=[None], dtype=tf.float32, name='adv_holder')
                             
-                            action_holder_list.append(action_holder)
-                            td_target_holder_list.append(td_target_holder)
-                            advantage_holder_list.append(advantage_holder)
+                            self.action_holder_list.append(action_holder)
+                            self.td_target_holder_list.append(td_target_holder)
+                            self.advantage_holder_list.append(advantage_holder)
                             
-                            entropy = -tf.reduce_mean(actor * tf.log(actor), name='entropy')
+                            #entropy = -tf.reduce_mean(actor * tf.log(actor), name='entropy')
                 
-                # Define Universal Critic Network
-                critic, c_vars = self.build_critic_network(...)
-                td_error = 
+                            td_error = td_target_holder - critic
+                             with tf.name_scope('critic_train'):
+                                critic_loss = tf.reduce_mean(tf.square(td_error), name='critic_loss') # mse of td error
+
+                            # Actor Loss
+                            with tf.name_scope('actor_train'):
+                                policy_as = tf.reduce_sum(actor * action_OH, 1) # policy for corresponding state and action
+                                objective_function = tf.log(policy_as) # objective function
+                                exp_v = objective_function * advantage_holder + entropy_beta * entropy
+                                actor_loss = tf.reduce_mean(-exp_v, name='actor_loss') # or reduce_sum
+
+                if scope != 'global':
+                    with tf.name_scope('local_grad'):
+                        a_grads = tf.gradients(actor_loss, a_vars)
+                        c_grads = tf.gradients(critic_loss, c_vars)
+                        if grad_clip_norm:
+                            a_grads = [(tf.clip_by_norm(grad, grad_clip_norm), var) for grad, var in a_grads if not grad is None]
+                            c_grads = [(tf.clip_by_norm(grad, grad_clip_norm), var) for grad, var in c_grads if not grad is None]
+
+                    # Sync with Global Network
+                    with tf.name_scope('sync'):
+                        # Pull global weights to local weights
+                        with tf.name_scope('pull'):
+                            pull_a_vars_op = [local_var.assign(glob_var) for local_var, glob_var in zip(a_vars, globalAC.a_vars)]
+                            pull_c_vars_op = [local_var.assign(glob_var) for local_var, glob_var in zip(c_vars, globalAC.c_vars)]
+
+                        # Push local weights to global weights
+                        with tf.name_scope('push'):
+                            update_a_op = actor_optimizer.apply_gradients(zip(a_grads, globalAC.a_vars))
+                            update_c_op = critic_optimizer.apply_gradients(zip(c_grads, globalAC.c_vars))
+
                 
-                        
-                    # Local Network
-                    if scope != 'global':
-                        self.action_holder = tf.placeholder(shape=[None],dtype=tf.int32, name='action_holder')
-                        self.action_OH = tf.one_hot(self.action_holder, action_size)
-                        #self.reward_holder = tf.placeholder(shape=[None],dtype=tf.float32, name='reward_holder')
-                        self.td_target_holder = tf.placeholder(shape=[None], dtype=tf.float32, name='td_target_holder')
-                        self.advantage_holder = tf.placeholder(shape=[None], dtype=tf.float32, name='adv_holder')
-
-
-                        self.td_error = self.td_target_holder - self.critic # for gradient calculation (equal to advantages)
-                        self.entropy = -tf.reduce_mean(self.actor * tf.log(self.actor), name='entropy')
-
-                        # Critic (value) Loss
-                        with tf.name_scope('critic_train'):
-                            self.critic_loss = tf.reduce_mean(tf.square(self.td_error), name='critic_loss') # mse of td error
-
-                        # Actor Loss
-                        with tf.name_scope('actor_train'):
-                            self.policy_as = tf.reduce_sum(self.actor * self.action_OH, 1) # policy for corresponding state and action
-                            self.objective_function = tf.log(self.policy_as) # objective function
-                            self.exp_v = self.objective_function * self.advantage_holder + entropy_beta * self.entropy
-                            self.actor_loss = tf.reduce_mean(-self.exp_v, name='actor_loss') # or reduce_sum
-
-                        with tf.name_scope('local_grad'):
-                            self.a_grads = tf.gradients(self.actor_loss, self.a_vars)
-                            self.c_grads = tf.gradients(self.critic_loss, self.c_vars)
-                            if self.grad_clip_norm:
-                                self.a_grads = [(tf.clip_by_norm(grad, self.grad_clip_norm), var) for grad, var in self.a_grads if not grad is None]
-                                self.c_grads = [(tf.clip_by_norm(grad, self.grad_clip_norm), var) for grad, var in self.c_grads if not grad is None]
-
-                        # Sync with Global Network
-                        with tf.name_scope('sync'):
-                            # Pull global weights to local weights
-                            with tf.name_scope('pull'):
-                                self.pull_a_vars_op = [local_var.assign(glob_var) for local_var, glob_var in zip(self.a_vars, globalAC.a_vars)]
-                                self.pull_c_vars_op = [local_var.assign(glob_var) for local_var, glob_var in zip(self.c_vars, globalAC.c_vars)]
-
-                            # Push local weights to global weights
-                            with tf.name_scope('push'):
-                                self.update_a_op = self.actor_optimizer.apply_gradients(zip(self.a_grads, globalAC.a_vars))
-                                self.update_c_op = self.critic_optimizer.apply_gradients(zip(self.c_grads, globalAC.c_vars))
-
         if scope != 'global':
             self.build_summarizer()
-    def build_actor_network(self, state_input):
+            
+    def build_actor_network(self, state_input, agent_id):
         with tf.variable_scope('actor'):
             layer = slim.conv2d(state_input, 32, [5,5], activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
@@ -169,16 +153,16 @@ class MAActorCritic(base):
             actor = layers.fully_connected(actor, self.action_size,
                                         activation_fn=tf.nn.softmax)
             
-        a_vars = common_vars+tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope + '/actor')
+        a_vars = common_vars+tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='agent'+str(agent_id)+'/actor')
         return actor, commom_layer, a_vars
     
-    def build_critic_network(self, layer):
+    def build_critic_network(self, layer, agent_id):
         with tf.variable_scope('critic'):
             critic = layers.fully_connected(layer, 1,
                                          activation_fn=None)
             critic = tf.reshape(critic, [-1])
 
-        c_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope + '/critic')
+        c_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='agent'+str(agent_id)+'/critic')
         return critic, c_vars
 
      # Update global network with local gradients
@@ -213,10 +197,5 @@ class MAActorCritic(base):
         with tf.name_scope('summary'):
             tf.summary.scalar(name='actor_loss', tensor=self.actor_loss)
             tf.summary.scalar(name='critic_loss', tensor=self.critic_loss)
-            tf.summary.scalar(name='Entropy', tensor=self.entropy)
+            #tf.summary.scalar(name='Entropy', tensor=self.entropy)
         self.summary_loss = tf.summary.merge_all(scope='summary')
-        
-        with tf.name_scope('Learning_Rate'):
-            # Learning Rate
-            tf.summary.scalar(name='actor_lr', tensor=self.lr_actor)
-            tf.summary.scalar(name='critic_lr', tensor=self.lr_critic)
