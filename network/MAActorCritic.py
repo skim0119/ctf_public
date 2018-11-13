@@ -65,34 +65,40 @@ class MAActorCritic(base):
                                                        lr_c_decay_step, lr_c_gamma, staircase=True, name='lr_critic')
 
             # Optimizer
-            with tf.device('/gpu:0'):
-                self.critic_optimizer = tf.train.AdamOptimizer(self.lr_critic, name='Adam_critic')
-                self.actor_optimizer = tf.train.AdamOptimizer(self.lr_actor, name='Adam_actor')
+            self.critic_optimizer = tf.train.AdamOptimizer(self.lr_critic, name='Adam_critic')
+            self.actor_optimizer = tf.train.AdamOptimizer(self.lr_actor, name='Adam_actor')
 
-                # global Network
-                # Build actor and critic network weights. (global network does not need training sequence)
-                for agent_id in range(self.num_agent):
-                    # For each agent, build an action policy
-                    with tf.name_scope('agent'+str(agent_id)):
-                        state_input = tf.placeholder(shape=in_size,dtype=tf.float32, name='state')
-                        self.state_input_list.append(state_input)
+            # global Network
+            # Build actor and critic network weights. (global network does not need training sequence)
+            for agent_id in range(self.num_agent):
+                # For each agent, build an action policy
+                with tf.name_scope('agent'+str(agent_id)):
+                    state_input = tf.placeholder(shape=in_size,dtype=tf.float32, name='state')
+                    self.state_input_list.append(state_input)
 
-                        # get the parameters of actor and critic networks
-                        actor, common_layer, a_vars = self.build_actor_network(state_input, agent_id)
-                        critic, c_vars = self.build_critic_network(common_layer, agent_id)
-                
+                    # get the parameters of actor and critic networks
+                    actor, a_vars = self.build_actor_network(state_input, agent_id)
+            self.critic, c_vars = self.build_critic_network(state_input)
 
-                        # Local Network
+            if scope == 'global': 
+                return
+
+            # Training Nodes
+            # Local Network
+            action_holder = tf.placeholder(shape=[None],dtype=tf.int32, name='action_holder')
+            action_OH = tf.one_hot(action_holder, action_size)
+            td_target_holder = tf.placeholder(shape=[None], dtype=tf.float32, name='td_target_holder')
+            advantage_holder = tf.placeholder(shape=[None], dtype=tf.float32, name='adv_holder')
+
+            self.action_holder_list.append(action_holder)
+            self.td_target_holder_list.append(td_target_holder)
+            self.advantage_holder_list.append(advantage_holder)
+
+            for agent_id in range(self.num_agent):
+                with tf.name_scope('agent'+str(agent_id)):
+
                         # Define how actor policy updates
                         if scope != 'global':
-                            action_holder = tf.placeholder(shape=[None],dtype=tf.int32, name='action_holder')
-                            action_OH = tf.one_hot(action_holder, action_size)
-                            td_target_holder = tf.placeholder(shape=[None], dtype=tf.float32, name='td_target_holder')
-                            advantage_holder = tf.placeholder(shape=[None], dtype=tf.float32, name='adv_holder')
-                            
-                            self.action_holder_list.append(action_holder)
-                            self.td_target_holder_list.append(td_target_holder)
-                            self.advantage_holder_list.append(advantage_holder)
                             
                             #entropy = -tf.reduce_mean(actor * tf.log(actor), name='entropy')
                 
@@ -153,16 +159,32 @@ class MAActorCritic(base):
             actor = layers.fully_connected(actor, self.action_size,
                                         activation_fn=tf.nn.softmax)
             
-        a_vars = common_vars+tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='agent'+str(agent_id)+'/actor')
-        return actor, commom_layer, a_vars
+        a_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='agent'+str(agent_id)+'/actor')
+        return actor, a_vars
     
-    def build_critic_network(self, layer, agent_id):
+    def build_critic_network(self, state_input):
         with tf.variable_scope('critic'):
+            layer = slim.conv2d(state_input, 32, [5,5], activation_fn=tf.nn.relu,
+                                weights_initializer=layers.xavier_initializer_conv2d(),
+                                biases_initializer=tf.zeros_initializer(),
+                                padding='VALID')
+            layer = slim.max_pool2d(layer, [2,2])
+            layer = slim.conv2d(layer, 64, [3,3], activation_fn=tf.nn.relu,
+                                weights_initializer=layers.xavier_initializer_conv2d(),
+                                biases_initializer=tf.zeros_initializer(),
+                                padding='VALID')
+            layer = slim.max_pool2d(layer, [2,2])
+            layer = slim.conv2d(layer, 64, [2,2], activation_fn=tf.nn.relu,
+                                weights_initializer=layers.xavier_initializer_conv2d(),
+                                biases_initializer=tf.zeros_initializer(),
+                                padding='VALID')
+            layer = slim.flatten(layer)
+            
             critic = layers.fully_connected(layer, 1,
                                          activation_fn=None)
             critic = tf.reshape(critic, [-1])
 
-        c_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='agent'+str(agent_id)+'/critic')
+        c_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/critic')
         return critic, c_vars
 
      # Update global network with local gradients
