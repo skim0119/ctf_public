@@ -31,7 +31,7 @@ class PolicyGen:
         load_weight : Load/reload weight to the model. 
     """
     
-    def __init__(self, free_map, agent_list, model_dir='./model/B4R4_Rzero_VANILLA', color='blue'):
+    def __init__(self, free_map, agent_list, model_dir='./model/B4R4_Rzero_VANILLA', color='blue', input_name='state:0', output_name='action:0'):
         """Constuctor for policy class.
         
         Args:
@@ -49,7 +49,9 @@ class PolicyGen:
         
         self.sess = tf.Session()
         self.model_dir = model_dir # Default
-        self.reset_network()
+        self.input_name = input_name
+        self.output_name = output_name
+        self.reset_network(self.input_name, self.output_name)
 
     def gen_action(self, agent_list, observation, free_map=None):
         """Action generation method.
@@ -82,7 +84,15 @@ class PolicyGen:
 
         return action_out
     
-    def reset_network(self, input_name = "state:0", output_name = "action:0"):
+    def reset_network_weight(self, input_name='state:0', output_name='action:0'):
+        ckpt = tf.train.get_checkpoint_state(self.model_dir)
+        if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
+            self.saver.restore(self.sess, ckpt.model_checkpoint_path)
+            print('Weight is succesfully loaded.', ckpt.model_checkpoint_path)
+        else:
+            print('Error : Graph is not loaded')
+    
+    def reset_network(self, input_name = 'state:0', output_name = 'action:0'):
         # Reset the weight to the newest saved weight.
         ckpt = tf.train.get_checkpoint_state(self.model_dir)
         if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
@@ -93,10 +103,7 @@ class PolicyGen:
             self.graph = tf.get_default_graph()
             self.state = self.graph.get_tensor_by_name(input_name)
             self.action = self.graph.get_tensor_by_name(output_name)
-            try:
-                self.input_shape = self.sess.run(self.graph.get_tensor_by_name('input_shape:0'))[0]
-            except KeyError:
-                self.input_shape = 9
+            self.input_shape = 9
             print('Graph is succesfully loaded.', ckpt.model_checkpoint_path)
         else:
             raise NameError

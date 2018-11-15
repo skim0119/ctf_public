@@ -217,12 +217,9 @@ class MAActorCritic(base):
                 self.td_target_holder           : td_target,
                 self.state_input_critic         : np.stack(state)
                 }
-        self.sess.run([self.update_a_op[pid], self.update_c_op], feed_dict)
+        aloss, closs, __, ___ = self.sess.run([self.actor_loss_list[pid], self.critic_loss, self.update_a_op[pid], self.update_c_op], feed_dict)
         
-        if summarize:
-            return self.sess.run(self.summary_loss_list[pid], feed_dict)
-        else:
-            return None
+        return aloss, closs
 
     def pull_global(self):
         self.sess.run([self.pull_a_vars_op, self.pull_c_vars_op])
@@ -258,7 +255,7 @@ class MAActorCritic(base):
         
         # Graph summary Loss
         self.summary_loss_list = []
-        with tf.name_scope('summary'):
+        with tf.name_scope('summary/'):
             cls = tf.summary.scalar(name='critic_loss', tensor=self.critic_loss)
             for agent_id in range(self.num_agent):
                 als = tf.summary.scalar(name='actor_loss', tensor=self.actor_loss_list[agent_id])
