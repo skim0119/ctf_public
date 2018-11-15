@@ -178,14 +178,9 @@ class MAActorCritic(base):
                     with tf.name_scope('push'):
                         for aid in range(self.num_agent):
                             for pid in range(self.num_policy_pool):
+                                self.update_a_op[aid][pid] = self.actor_optimizer.apply_gradients(zip(self.a_grads_list[aid], globalAC.a_vars_list[pid]))
+                                self.update_c_op[aid][pid] = self.actor_optimizer.apply_gradients(zip(self.c_grads_list[aid], globalAC.c_vars_list[pid]))
                                 
-                        # Actor Weights Push
-                        for a_grads, global_a_vars in zip(self.a_grads_list, globalAC.a_vars_list):
-                            self.update_a_op.append(self.actor_optimizer.apply_gradients(zip(a_grads, global_a_vars)))
-                        # Critic Weights Push
-                        for c_grads, global_c_vars in zip(self.c_grads_list, globalAC.c_vars_list):
-                            self.update_c_op.append(self.critic_optimizer.apply_gradients(zip(c_grads, global_c_vars)))
-
                 self.pull_global()
 
             
@@ -231,12 +226,24 @@ class MAActorCritic(base):
                 self.advantage_holder_list[pid] : advantage,
                 self.td_target_holder_list[pid] : td_target
                 }
-        aloss, closs, _,__ = self.sess.run([self.actor_loss_list[pid], self.critic_loss_list[pid], self.update_a_op[pid], self.update_c_op[pid]], feed_dict)
+        aloss, closs = self.sess.run([self.actor_loss_list[pid], self.critic_loss_list[pid]], feed_dict)
+
+        ops_a = []
+        ops_c = []
+        for f, t in enumerate(self.policy_index):
+            ops_a.append(self.update_a_op[f][t])
+            ops_c.append(self.update_c_op[f][t])
+        self.sess.run(ops_a + ops_c, feed_dict)
         
         return aloss, closs
 
     def pull_global(self):
-        self.sess.run([self.pull_a_vars_op, self.pull_c_vars_op])
+        ops = []
+        for f, t in enumerate(self.policy_index):
+            ops.append(self.pull_a_vars_op[f][t])
+            ops.append(self.pull_c_vars_op[f][t])
+
+        self.sess.run(ops)
 
     # Return critic
     def get_critic(self, s, agent_indices):
