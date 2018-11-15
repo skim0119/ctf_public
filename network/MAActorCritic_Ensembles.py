@@ -270,4 +270,5 @@ class MAActorCritic(base):
     def select_policy(self):
         assert not self.is_Global
         policy_index = random.sample(range(self.num_policy_pool), self.num_agent)
+        self.pull_global()
         return policy_index
