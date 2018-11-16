@@ -57,6 +57,7 @@ class MAActorCritic(base):
         self.is_Global             = (scope == 'global')
         self.global_step           = global_step
         self.num_agent             = num_agent
+        self.globalAC              = globalAC
 
         with tf.variable_scope(scope):
             ## Learning Rate Variables and Parameters
@@ -75,16 +76,18 @@ class MAActorCritic(base):
             # Build actor network weights. (global network does not need training sequence)
             # Create pool of policy to select from
             if self.is_Global:
+                self.state_input_list = []
                 self.actor_list  = []
                 self.a_vars_list = []
                 self.critic_list      = []
                 self.c_vars_list      = []
-                dummy_input = tf.placeholder(shape=in_size, dtype=tf.float32)
                 for agent_id in range(self.num_policy_pool): # number of policy : pool size
                     with tf.variable_scope('agent'+str(agent_id)):
-                        actor, a_vars, c_layer = self.build_actor_network(dummy_input, agent_id)
+                        state_input = tf.placeholder(shape=in_size, dtype=tf.float32)
+                        actor, a_vars, c_layer = self.build_actor_network(state_input, agent_id)
                     critic, c_vars = self.build_critic_network(c_layer, agent_id)
                     
+                    self.state_input_list.append(state_input)
                     self.actor_list.append(actor)
                     self.a_vars_list.append(a_vars)
                     self.critic_list.append(critic)
@@ -117,23 +120,25 @@ class MAActorCritic(base):
                         
                 ## Local Network Trainer
                 # Actor Train
-                self.action_holder_list     = []
-                self.advantage_holder_list  = []
-                self.actor_loss_list        = []
-                self.likelihood_holder_list = []
+                self.action_holder_list      = []
+                self.advantage_holder_list   = []
+                self.actor_loss_list         = []
+                self.sample_prob_holder_list = []
                 with tf.name_scope('actor_loss'):
                     for agent_id in range(self.num_agent):
                         with tf.variable_scope('agent'+str(agent_id)):
                             action_holder = tf.placeholder(shape=[None],dtype=tf.int32, name='action_hold')
                             action_OH = tf.one_hot(action_holder, action_size)
                             advantage_holder = tf.placeholder(shape=[None], dtype=tf.float32, name='adv_hold')
+                            sample_prob_holder = tf.placeholder(shape=[None], dtype=tf.float32, name='sample_ratio_hold')
 
                             actor = self.actor_list[agent_id]
                             entropy = -tf.reduce_mean(actor * tf.log(actor))
                             objective_function = tf.log(tf.reduce_sum(actor * action_OH, 1)) 
-                            exp_v = objective_function * advantage_holder + entropy_beta * entropy
+                            exp_v = objective_function * advantage_holder * sample_prob_holder + entropy_beta * entropy
                             actor_loss = tf.reduce_mean(-exp_v)
 
+                        self.sample_prob_holder_list.append(sample_prob_holder)
                         self.action_holder_list.append(action_holder)
                         self.advantage_holder_list.append(advantage_holder)
                         self.actor_loss_list.append(actor_loss)
@@ -223,12 +228,24 @@ class MAActorCritic(base):
         return critic, c_vars
 
     ## Pipes
-    def update_unitpolicy_global(self, pid, state, action, advantage, td_target): # push
+    def update_unitpolicy_global(self, pid, state, action, advantage, td_target, likelihood_prev): # push
+        # Get likelihood of global with states
+        gid = self.policy_index[pid]
+        feed_dict = {self.globalAC.state_input_list[gid] : np.stack(state)}
+        soft_prob = self.globalAC.sess.run(self.globalAC.actor_list[gid], feed_dict)    
+        likelihood = np.array([ar[act] for ar, act in zip(soft_prob,action)])
+        running_prob = 1.0
+        for idx, l in enumerate(likelihood):
+            running_prob *= l
+            likelihood[idx] = running_prob
+        sample_prob = likelihood/likelihood_prev
+        
         feed_dict = {
-                self.state_input_list[pid]      : np.stack(state),
-                self.action_holder_list[pid]    : action,
-                self.advantage_holder_list[pid] : advantage,
-                self.td_target_holder_list[pid] : td_target
+                self.state_input_list[pid]        : np.stack(state),
+                self.action_holder_list[pid]      : action,
+                self.advantage_holder_list[pid]   : advantage,
+                self.td_target_holder_list[pid]   : td_target,
+                self.sample_prob_holder_list[pid] : sample_prob
                 }
         aloss, closs = self.sess.run([self.actor_loss_list[pid], self.critic_loss_list[pid]], feed_dict)
         
@@ -257,7 +274,7 @@ class MAActorCritic(base):
         vs = np.array([v[0] for v in vs])
         return vs
 
-    # Choose Action
+    # Choose Action            
     def get_action(self, s, agent_indices):
         feed_dict = {}
         for idx in range(self.num_agent):
@@ -266,8 +283,10 @@ class MAActorCritic(base):
         a_probs = self.sess.run(self.actor_list, feed_dict)    
         a_probs = np.array([ar[0] for ar in a_probs])
         
-        return [np.random.choice(self.action_size, p=prob/sum(prob)) for prob in a_probs]
-    
+        action_selection = [np.random.choice(self.action_size, p=prob/sum(prob)) for prob in a_probs]
+        
+        return action_selection, a_probs
+            
     # Policy Random Pool
     def select_policy(self, pull = True):
         assert not self.is_Global
