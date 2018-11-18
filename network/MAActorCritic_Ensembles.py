@@ -11,7 +11,7 @@ from network.base import base
 import utility
 
 
-# implementation for centralized action and critic
+# implementation for decentralized action and centralized critic
 class MAActorCritic(base):
     def __init__(self,
                  in_size,
