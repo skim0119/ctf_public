@@ -17,7 +17,7 @@ import utility
 
 
 # implementation for decentralized action and centralized critic
-class MAActorCritic():
+class Population():
     def __init__(self,
                  in_size,
                  action_size,
@@ -78,8 +78,7 @@ class MAActorCritic():
         self.num_agent       = num_agent
         self.is_Global  = (scope == 'global')
 
-        with tf.variable_scope(scope):
-            ## Learning Rate Variables and Parameters
+        with tf.name_scope('Learning_Rate'):
             self.local_step = tf.Variable(initial_step,
                                           trainable=False,
                                           name='local_step')
@@ -95,11 +94,13 @@ class MAActorCritic():
                                                         lr_c_gamma,
                                                         staircase=True,
                                                         name='lr_critic')
+            
+        with tf.variable_scope(scope), tf.device('/gpu:0'):
+            ## Learning Rate Variables and Parameters
 
             ## Optimizer
-            with tf.device('/gpu:0'):
-                self.a_opt_list = [tf.train.AdamOptimizer(self.lr_actor) for _ in range(self.num_policy_pool)] 
-                self.c_opt_list = [tf.train.AdamOptimizer(self.lr_critic) for _ in range(self.num_policy_pool)] 
+            self.a_opt_list = [tf.train.AdamOptimizer(self.lr_actor) for _ in range(self.num_policy_pool)] 
+            self.c_opt_list = [tf.train.AdamOptimizer(self.lr_critic) for _ in range(self.num_policy_pool)] 
 
             ## Global Network ##
             # Build actor network weights. (global network does not need training sequence)
@@ -109,13 +110,12 @@ class MAActorCritic():
             self.a_vars_list      = []
             self.critic_list      = []
 
-            for agent_id in range(self.num_policy_pool): # number of policy 
-                with tf.variable_scope('agent'+str(agent_id)):
-                    state_input = tf.placeholder(shape=in_size,
-                                                 dtype=tf.float32,
-                                                 name='state_input_hold')
-                    actor, a_vars, c_layer = self._build_actor_network(state_input, agent_id)
-                critic, self.c_vars = self._build_critic_network(c_layer)
+            for policyID in range(self.num_policy_pool): # number of policy 
+                state_input = tf.placeholder(shape=in_size,
+                                             dtype=tf.float32,
+                                             name='state_input_hold')
+                actor, a_vars, c_layer = self._build_actor_network(state_input, policyID)
+                critic, self.c_vars = self._build_critic_network(c_layer, policyID)
 
                 self.state_input_list.append(state_input)
                 self.actor_list.append(actor)
@@ -123,7 +123,7 @@ class MAActorCritic():
                 self.critic_list.append(critic)
                         
             ## Local Network (Trainer)
-            if not self.is_global:
+            if not self.is_Global:
                 self.policy_index = self.select_policy(pull=False)
                 
                 # Loss
@@ -133,8 +133,8 @@ class MAActorCritic():
                 self.sample_prob_holder_list = []
                 self.critic_loss_list        = []
                 self.td_target_holder_list   = []
-                for policyID, actor in enumerate(self.actor_list):
-                    with tf.variable_scope(str(policyID)+'_loss'):
+                with tf.name_scope('Trainer'):
+                    for policyID, actor in enumerate(self.actor_list):
                         action_holder      = tf.placeholder(shape=[None],
                                                             dtype=tf.int32,
                                                             name='action_hold')
@@ -157,22 +157,22 @@ class MAActorCritic():
                         exp_v = obj_func * adv_holder * sample_prob_holder + entropy_beta * entropy
                         actor_loss = tf.reduce_mean(-exp_v, name='actor_loss')
 
-                        td_error = td_target_holder - self.critic[policyID]
+                        td_error = td_target_holder - self.critic_list[policyID]
                         critic_loss = tf.reduce_mean(tf.square(td_error),
                                                      name='critic_loss')
 
-                    self.sample_prob_holder_list.append(sample_prob_holder)
-                    self.action_holder_list.append(action_holder)
-                    self.adv_holder_list.append(adv_holder)
-                    self.actor_loss_list.append(actor_loss)
+                        self.sample_prob_holder_list.append(sample_prob_holder)
+                        self.action_holder_list.append(action_holder)
+                        self.adv_holder_list.append(adv_holder)
+                        self.actor_loss_list.append(actor_loss)
 
-                    self.td_target_holder_list.append(td_target_holder)
-                    self.critic_loss_list.append(critic_loss)
+                        self.td_target_holder_list.append(td_target_holder)
+                        self.critic_loss_list.append(critic_loss)
 
                 # Gradient
                 self.a_grads_list = []
                 self.c_grads_list = []
-                with tf.name_scope('gradient/'), tf.device('/gpu:0'):
+                with tf.name_scope('gradient'):
                     for agent_id, (aloss, avar, closs) in enumerate(zip(
                                                 self.actor_loss_list,
                                                 self.a_vars_list,
@@ -194,7 +194,7 @@ class MAActorCritic():
                 self.pull_a_ops = []
                 self.pull_c_ops = None
                 self.update_a_ops = []
-                self.udpate_c_ops = []
+                self.update_c_ops = []
                 with tf.name_scope('sync'):
                     # Pull global weights to local weights
                     with tf.name_scope('pull'):
@@ -207,11 +207,11 @@ class MAActorCritic():
                     with tf.name_scope('push'):
                         for opt, lGrads, gVars in zip(self.a_opt_list, self.a_grads_list, globalAC.a_vars_list):
                             self.update_a_ops.append(opt.apply_gradients(zip(lGrads, gVars)))
-                        for opt, lGrads in zip(self.c_opt_list, self.c_grads_list):
+                        for opt, lGrads in zip(self.c_opt_list,self.c_grads_list):
                             self.update_c_ops.append(opt.apply_gradients(zip(lGrads, globalAC.c_vars)))
             
-    def _build_actor_network(self, state_input, agent_id):
-        with tf.variable_scope('actor'):
+    def _build_actor_network(self, state_input, policyID):
+        with tf.variable_scope('actor'+str(policyID)):
             layer = slim.conv2d(state_input, 32, [5,5], activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
@@ -232,10 +232,10 @@ class MAActorCritic():
             actor = layers.fully_connected(actor, self.action_size,
                                         activation_fn=tf.nn.softmax)
             
-        a_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/agent'+str(agent_id)+'/actor')
+        a_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/actor'+str(policyID))
         return actor, a_vars, layer
     
-    def _build_critic_network(self, layer):
+    def _build_critic_network(self, layer, policyID):
         with tf.variable_scope('critic', reuse=tf.AUTO_REUSE): 
             critic = layers.fully_connected(layer, 1,
                                          activation_fn=None)
@@ -267,13 +267,13 @@ class MAActorCritic():
                 }
         aloss, closs = self.sess.run([self.actor_loss_list[policyID], self.critic_loss_list[policyID]], feed_dict)
         
-        ops = [self.update_a_op[policyID], self.update_c_op[policyID]]
+        ops = [self.update_a_ops[policyID], self.update_c_ops[policyID]]
         self.sess.run(ops, feed_dict)
         
         return aloss, closs
 
     def pull_global(self):
-        ops = [pull_a_op in [self.pull_a_ops[i] for i in self.policy_index]]
+        ops = [self.pull_a_ops[i] for i in self.policy_index]
         ops.append(self.pull_c_ops)
 
         self.sess.run(ops)
@@ -290,11 +290,13 @@ class MAActorCritic():
 
     # Choose Action            
     def get_action(self, s, agent_indices):
+        actor_list = []
         feed_dict = {}
         for aid, policyID in enumerate(self.policy_index):
             feed_dict.update({self.state_input_list[policyID]: s[agent_indices==aid]})
+            actor_list.append(self.actor_list[policyID])
 
-        a_probs = self.sess.run(self.actor_list, feed_dict)
+        a_probs = self.sess.run(actor_list, feed_dict)
         a_probs = np.array([ar[0] for ar in a_probs])
         
         action_selection = [np.random.choice(self.action_size, p=prob/sum(prob)) for prob in a_probs]
@@ -304,7 +306,7 @@ class MAActorCritic():
     # Policy Random Pool
     def select_policy(self, pull = True):
         assert not self.is_Global
-        policy_index = random.samples(range(self.num_policy_pool), self.num_agent)
+        policy_index = random.choices(range(self.num_policy_pool), k=self.num_agent)
         policy_index.sort()
         if pull:
             self.pull_global()
