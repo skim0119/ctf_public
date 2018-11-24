@@ -37,7 +37,8 @@ class Population():
                  entropy_beta    = 0.001,
                  sess            = None,
                  globalAC        = None,
-                 num_policy_pool = 10
+                 num_policy_pool = 10,
+                 allowPolicyOverlap = False
                  ):
         
         """ Initialize AC network and required parameters
@@ -76,6 +77,7 @@ class Population():
         self.global_step     = global_step
         self.num_policy_pool = num_policy_pool
         self.num_agent       = num_agent
+        self.allowPolicyOverlap = allowPolicyOverlap
         self.is_Global  = (scope == 'global')
 
         with tf.name_scope('Learning_Rate'):
@@ -99,7 +101,7 @@ class Population():
             ## Learning Rate Variables and Parameters
 
             ## Optimizer
-            self.a_opt_list = [tf.train.AdamOptimizer(self.lr_actor) for _ in range(self.num_policy_pool)] 
+            self.a_opt_list = [tf.train.AdamOptimizer(self.lr_actor) for _ in range(self.num_policy_pool)]
             self.c_opt_list = [tf.train.AdamOptimizer(self.lr_critic) for _ in range(self.num_policy_pool)] 
 
             ## Global Network ##
@@ -131,6 +133,7 @@ class Population():
                 self.adv_holder_list         = []
                 self.actor_loss_list         = []
                 self.sample_prob_holder_list = []
+                self.sample_prob_cumulative_holder_list = []
                 self.critic_loss_list        = []
                 self.td_target_holder_list   = []
                 with tf.name_scope('Trainer'):
@@ -150,6 +153,9 @@ class Population():
                         sample_prob_holder = tf.placeholder(shape=[None],
                                                             dtype=tf.float32,
                                                             name='sample_ratio_hold')
+                        sample_prob_cumulatve_holder = tf.placeholder(shape=[None],
+                                                            dtype=tf.float32,
+                                                            name='sample_ratio_cumulative_hold')
 
                         entropy = -tf.reduce_mean(actor * tf.log(actor),
                                                   name='entropy')
@@ -158,10 +164,12 @@ class Population():
                         actor_loss = tf.reduce_mean(-exp_v, name='actor_loss')
 
                         td_error = td_target_holder - self.critic_list[policyID]
-                        critic_loss = tf.reduce_mean(tf.square(td_error),
+                        critic_loss = tf.reduce_mean(tf.square(td_error*sample_prob_cumulatve_holder),
                                                      name='critic_loss')
 
                         self.sample_prob_holder_list.append(sample_prob_holder)
+                        self.sample_prob_cumulative_holder_list.append(sample_prob_cumulatve_holder)
+                        
                         self.action_holder_list.append(action_holder)
                         self.adv_holder_list.append(adv_holder)
                         self.actor_loss_list.append(actor_loss)
@@ -182,11 +190,6 @@ class Population():
                         with tf.variable_scope('agent'+str(agent_id)):
                             a_grads = tf.gradients(aloss, avar)
                             c_grads = tf.gradients(closs, cvar)
-                            if grad_clip_norm:
-                                a_grads = [(tf.clip_by_norm(grad, grad_clip_norm), var)
-                                            for grad, var in a_grads if not grad is None]
-                                c_grads = [(tf.clip_by_norm(grad, grad_clip_norm), var)
-                                            for grad, var in c_grads if not grad is None]
                         self.a_grads_list.append(a_grads)
                         self.c_grads_list.append(c_grads)
 
@@ -245,17 +248,22 @@ class Population():
         return critic, c_vars
 
     ## Pipes
-    def update_unitpolicy_global(self, agent_id, state, action, adv, td_target, likelihood_prev): 
+    def update_unitpolicy_global(self, agent_id, state, action, adv, td_target, behavior_policy, updateCritic=False): 
         # Get likelihood of global with states
         policyID = self.policy_index[agent_id]
         feed_dict = {self.globalAC.state_input_list[policyID] : np.stack(state)}
-        soft_prob = self.globalAC.sess.run(self.globalAC.actor_list[policyID], feed_dict)    
-        likelihood = np.array([ar[act] for ar, act in zip(soft_prob,action)])
+        soft_prob = self.globalAC.sess.run(self.globalAC.actor_list[policyID], feed_dict)
+        target_policy = np.array([ar[act] for ar, act in zip(soft_prob,action)])
+        
+        retraceLambda = 0.202
+        sample_weight = []
+        sample_weight_cumulative = []
         running_prob = 1.0
-        for idx, l in enumerate(likelihood):
-            running_prob *= l
-            likelihood[idx] = running_prob
-        sample_prob = likelihood/likelihood_prev
+        for idx, (tp, bp) in enumerate(zip(target_policy, behavior_policy)):
+            ratio = retraceLambda * min(1.0, tp / bp)
+            running_prob *= ratio
+            sample_weight.append(ratio)
+            sample_weight_cumulative.append(running_prob)
         
         # update Sequence
         feed_dict = {
@@ -263,14 +271,22 @@ class Population():
                 self.action_holder_list[policyID]      : action,
                 self.adv_holder_list[policyID]         : adv,
                 self.td_target_holder_list[policyID]   : td_target,
-                self.sample_prob_holder_list[policyID] : sample_prob
+                self.sample_prob_holder_list[policyID] : sample_weight,
+                self.sample_prob_cumulative_holder_list[policyID] : sample_weight_cumulative
                 }
-        aloss, closs = self.sess.run([self.actor_loss_list[policyID], self.critic_loss_list[policyID]], feed_dict)
+        if updateCritic:
+            aloss, closs = self.sess.run([self.actor_loss_list[policyID], self.critic_loss_list[policyID]], feed_dict)
+            ops = [self.update_a_ops[policyID], self.update_c_ops[policyID]]
+            self.sess.run(ops, feed_dict)
         
-        ops = [self.update_a_ops[policyID], self.update_c_ops[policyID]]
-        self.sess.run(ops, feed_dict)
+            return aloss, closs
+        else: 
+            aloss = self.sess.run(self.actor_loss_list[policyID], feed_dict)
+            ops = self.update_a_ops[policyID]
+            self.sess.run(ops, feed_dict)
         
-        return aloss, closs
+            return aloss, None
+        
 
     def pull_global(self):
         ops = [self.pull_a_ops[i] for i in self.policy_index]
@@ -278,35 +294,28 @@ class Population():
 
         self.sess.run(ops)
 
-    # Return critic
-    def get_critic(self, s, agent_indices):
-        feed_dict = {}
-        for idx in range(self.num_agent):
-            feed_dict.update( {self.state_input_list[idx] : s[agent_indices==idx]} )
-            
-        vs = self.sess.run(self.critic_list, feed_dict)
-        vs = np.array([v[0] for v in vs])
-        return vs
-
-    # Choose Action            
-    def get_action(self, s, agent_indices):
-        actor_list = []
-        feed_dict = {}
+    # Return action and critic
+    def get_ac(self, s):
+        critic_list = []
+        a_probs = []
         for aid, policyID in enumerate(self.policy_index):
-            feed_dict.update({self.state_input_list[policyID]: s[agent_indices==aid]})
-            actor_list.append(self.actor_list[policyID])
-
-        a_probs = self.sess.run(actor_list, feed_dict)
-        a_probs = np.array([ar[0] for ar in a_probs])
-        
+            feed_dict = {self.state_input_list[policyID] : s[aid:aid+1,]}
+            a, c = self.sess.run([self.actor_list[policyID], self.critic_list[policyID]], feed_dict)
+            a_probs.append(a[0])
+            critic_list.append(c[0])
+            
         action_selection = [np.random.choice(self.action_size, p=prob/sum(prob)) for prob in a_probs]
         
-        return action_selection, a_probs
+        return action_selection, a_probs, critic_list
             
     # Policy Random Pool
     def select_policy(self, pull = True):
         assert not self.is_Global
-        policy_index = random.choices(range(self.num_policy_pool), k=self.num_agent)
+        if self.allowPolicyOverlap:
+            policy_index = random.choices(range(self.num_policy_pool), k=self.num_agent)
+        else:
+            policy_index = random.sample(range(self.num_policy_pool), k=self.num_agent)
+            
         policy_index.sort()
         if pull:
             self.pull_global()
