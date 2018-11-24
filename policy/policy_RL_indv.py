@@ -75,7 +75,8 @@ class PolicyGen:
         """
 
         obs = one_hot_encoder(observation, agent_list, self.input_shape, reverse=not self.is_blue)
-        action_prob = self.sess.run(self.action, feed_dict={self.state:obs}) # Action Probability
+        action_prob = [self.sess.run(self.action, feed_dict={self.state : obs[i:i+1,]})[0] for i in range(len(agent_list))]
+        #action_prob = self.sess.run(self.action, feed_dict={self.state:obs}) # Action Probability
 
         # If the policy is deterministic policy, return the argmax
         # The parameter can be changed with set_deterministic(bool)
@@ -102,8 +103,8 @@ class PolicyGen:
             self.graph = tf.Graph()
             self.sess = tf.Session(graph=self.graph)
             with self.graph.as_default():
-                self.saver = tf.train.import_meta_graph(ckpt.model_checkpoint_path+'.meta', import_scope=im_scope, clear_devices=True);
-                self.saver.restore(self.sess, ckpt.model_checkpoint_path)
+                saver = tf.train.import_meta_graph(ckpt.model_checkpoint_path+'.meta', import_scope=im_scope, clear_devices=True);
+                saver.restore(self.sess, ckpt.model_checkpoint_path)
                 #:print([n.name for n in self.graph.as_graph_def().node])
             
                 self.state = self.graph.get_tensor_by_name(input_name)
