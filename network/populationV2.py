@@ -88,7 +88,7 @@ class Population():
 
             ## Optimizer
             self.a_opt_list = [tf.train.AdamOptimizer(self.lr_actor, name='Adam'+str(idx))
-                                               for ldx in range(self.num_policy_pool)]
+                                               for idx in range(self.num_policy_pool)]
 
             ## Global Network ##
             # Build actor network weights. (global network does not need training sequence)
