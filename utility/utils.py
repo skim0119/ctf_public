@@ -2,20 +2,76 @@ from collections import deque
 import numpy as np
 import random
 
-def discount_rewards(r, gamma, normalize=False):
-    """ take 1D float numpy array of rewards and compute discounted reward """
-    if normalize:
-        r = (r - np.mean(r)) / (np.std(r)+1e-8) # normalize
-    discounted_r = np.zeros_like(r)
-    running_add = 0.0
-    for t in reversed(range(r.size)):
-        running_add = (running_add * gamma + r[t])
-        discounted_r[t] = running_add
+"""Utility methods and classes used in CtF Problem
 
-    return discounted_r
+This module contains extra features and functions frequently used in Ctf Project.
+Please include the docstrings for any method or class to easily reference from Jupyter
+Any pipeline or data manipulation is excluded: they are included in dataModule.py file.
+
+Methods:
+    discount_rewards(numpy.list, float, bool): 
+        Perform discounting reward to the list by the ratio 'gamma'
+        Include normalization of the list at the end.
+
+    normalize(numpy.list):
+        Only perform the normalization of the list.
+        * Centralize by subtracting the average, zoom by dividing the variance.
+
+Classes:
+    MovingAverage:
+        The container in format of queue.
+        Only store upto fixed amount of data, and return the average.
+        Any abundant records will be removed, and the average will be kept
+
+    Experience_bufffer:
+        The container in format of list.
+        Provides method of sampling and shuffling.
+
+Note:
+    Use 'from utils import <def_name>' to use specific method/class
+
+Todo:
+    * Finish documenting the module
+    * If necessary, include __main__ in module for debuging and quick operation checking
+
+"""
+
+def discount_rewards(rewards, gamma, normalize=False):
+    """ take 1D float numpy array of rewards and compute discounted reward 
+
+    Args:
+        rewards (numpy.array): list of rewards.
+        gamma (float): discount rate
+        normalize (bool): If true, normalize at the end (default=False) 
+
+    Returns:
+        numpy.list : Return discounted reward
+    
+    """
+
+    discReward = np.zeros_like(r)
+    runningAdd = 0.0
+    for idx, reward in enumerate(reversed(rewards)):
+        runningAdd = (runningAdd * gamma + reward)
+        discReward[idx] = runningAdd
+
+    if normalize:
+        discReward = (discReward - np.mean(discReward)) / (np.std(discReward)+1e-8) # normalize
+
+    return discReward
 
 def normalize(r):
-    return (r - np.mean(r)) / (np.std(r)+1e-8)
+    """ take 1D float numpy array and normalize it
+
+    Args:
+        r (numpy.array): list of numbers
+
+    Returns:
+        numpy.list : return normalized list
+    
+    """
+
+    return (r - np.mean(r)) / (np.std(r)+1e-8) # small addition to avoid dividing by zero
 
 class MovingAverage:
     def __init__(self, size):
