@@ -49,7 +49,7 @@ def discount_rewards(rewards, gamma, normalize=False):
     
     """
 
-    discReward = np.zeros_like(r)
+    discReward = np.zeros_like(rewards)
     runningAdd = 0.0
     for idx, reward in enumerate(reversed(rewards)):
         runningAdd = (runningAdd * gamma + reward)
