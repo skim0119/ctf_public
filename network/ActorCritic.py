@@ -1,5 +1,4 @@
 import tensorflow as tf
-import tensorflow.contrib.slim as slim
 import tensorflow.contrib.layers as layers
 
 import numpy as np
@@ -9,7 +8,7 @@ from network.base import base
 
 import utility
 
-class ActorCritic(base):
+class ActorCritic():
     def __init__(self,
                  in_size,
                  action_size,
@@ -109,33 +108,42 @@ class ActorCritic(base):
                             self.update_a_op = self.actor_optimizer.apply_gradients(zip(self.a_grads, globalAC.a_vars))
                             self.update_c_op = self.critic_optimizer.apply_gradients(zip(self.c_grads, globalAC.c_vars))
 
-        if scope != 'global':
-            self.build_summarizer()
     def build_network(self):
-        layer = slim.conv2d(self.state_input, 32, [5,5], activation_fn=tf.nn.relu,
-                            weights_initializer=layers.xavier_initializer_conv2d(),
-                            biases_initializer=tf.zeros_initializer(),
+        layer = layer.conv2d(self.state_input, 32, [5,5],
+                            activation=tf.nn.relu,
+                            kernel_initializer=tf.truncated_normal_initializer(10.0,5.0),
+                            bias_initializer=tf.zeros_initializer(),
                             padding='VALID')
-        layer = slim.max_pool2d(layer, [2,2])
-        layer = slim.conv2d(layer, 64, [3,3], activation_fn=tf.nn.relu,
-                            weights_initializer=layers.xavier_initializer_conv2d(),
-                            biases_initializer=tf.zeros_initializer(),
+        layer = layer.max_pooling2d(layer, [2,2])
+        layer = layer.conv2d(layer, 64, [3,3],
+                            activation=tf.nn.relu,
+                            kernel_initializer=tf.truncated_normal_initializer(10.0,5.0),
+                            bias_initializer=tf.zeros_initializer(),
                             padding='VALID')
-        layer = slim.max_pool2d(layer, [2,2])
-        layer = slim.conv2d(layer, 64, [2,2], activation_fn=tf.nn.relu,
-                            weights_initializer=layers.xavier_initializer_conv2d(),
-                            biases_initializer=tf.zeros_initializer(),
+        layer = layer.max_pooling2d(layer, [2,2])
+        layer = layer.conv2d(layer, 64, [2,2],
+                            activation=tf.nn.relu,
+                            kernel_initializer=tf.truncated_normal_initializer(10.0,5.0),
+                            bias_initializer=tf.zeros_initializer(),
                             padding='VALID')
-        layer = slim.flatten(layer)
+        layer = layer.flatten(layer)
         
         with tf.variable_scope('actor'):
-            self.actor = layers.fully_connected(layer, 128)
-            self.actor = layers.fully_connected(self.actor, self.action_size,
-                                        activation_fn=tf.nn.softmax)
-            self.actor_argmax = tf.argmax(self.actor, axis=1,output_type=tf.int32, name='argmax')
+            self.actor = layers.fully_connected(layer,
+                                                128,
+                                                weight_initializer=tf.truncated_normal_initializer(10.0,5.0))
+            self.actor = layers.fully_connected(self.actor,
+                                                self.action_size,
+                                                weight_initializer=tf.truncated_normal_initializer(10.0,5.0),
+                                                activation_fn=tf.nn.softmax)
+            self.actor_argmax = tf.argmax(self.actor,
+                                          axis=1,
+                                          output_type=tf.int32,
+                                          name='argmax')
 
         with tf.variable_scope('critic'):
             self.critic = layers.fully_connected(layer, 1,
+                                                 weight_initializer=tf.truncated_normal_initializer(10.0,5.0),
                                                  activation_fn=None)
             self.critic = tf.reshape(self.critic, [-1])
 
@@ -145,47 +153,16 @@ class ActorCritic(base):
 
         return a_vars, c_vars
 
-     # Update global network with local gradients
+    # Update global network with local gradients
     def update_global(self, feed_dict):
         al, cl, etrpy, _, __ = self.sess.run([self.actor_loss, self.critic_loss, self.entropy, self.update_a_op, self.update_c_op], feed_dict)
         return al, cl, etrpy
-        #_,__,summary_str = self.sess.run([self.update_a_op, self.update_c_op, self.summary_loss], feed_dict)
-        #return summary_str
 
     def pull_global(self):
         self.sess.run([self.pull_a_vars_op, self.pull_c_vars_op])
 
-     # Choose Action
+    # Choose Action
     def choose_action(self, s):
         a_probs = self.sess.run(self.actor, {self.state_input: s})
         
         return [np.random.choice(self.action_size, p=prob/sum(prob)) for prob in a_probs]
-    
-    def build_summarizer(self):
-        # Summary
-        # Histogram output
-        with tf.name_scope('debug_parameters'):
-            tf.summary.histogram('output', self.actor)
-            tf.summary.histogram('critic', self.critic)        
-            tf.summary.histogram('action', self.action_holder)
-            tf.summary.histogram('objective_function', self.objective_function)
-            tf.summary.histogram('td_target', self.td_target_holder)
-            tf.summary.histogram('adv_in', self.advantage_holder)
-            #tf.summary.histogram('rewards_in', self.reward_holder)
-        
-        # Graph summary Loss
-        with tf.name_scope('summary'):
-            tf.summary.scalar(name='actor_loss', tensor=self.actor_loss)
-            tf.summary.scalar(name='critic_loss', tensor=self.critic_loss)
-            tf.summary.scalar(name='Entropy', tensor=self.entropy)
-        self.summary_loss = tf.summary.merge_all(scope='summary')
-        
-        with tf.name_scope('weights_bias'):
-            # Histogram weights and bias
-            for var in slim.get_model_variables():
-                tf.summary.histogram(var.op.name, var)
-                
-        with tf.name_scope('Learning_Rate'):
-            # Learning Rate
-            tf.summary.scalar(name='actor_lr', tensor=self.lr_actor)
-            tf.summary.scalar(name='critic_lr', tensor=self.lr_critic)
