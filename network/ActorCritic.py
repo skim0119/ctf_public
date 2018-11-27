@@ -107,43 +107,47 @@ class ActorCritic():
                         with tf.name_scope('push'):
                             self.update_a_op = self.actor_optimizer.apply_gradients(zip(self.a_grads, globalAC.a_vars))
                             self.update_c_op = self.critic_optimizer.apply_gradients(zip(self.c_grads, globalAC.c_vars))
-
-    def build_network(self):
-        layer = layer.conv2d(self.state_input, 32, [5,5],
-                            activation=tf.nn.relu,
-                            kernel_initializer=tf.truncated_normal_initializer(10.0,5.0),
-                            bias_initializer=tf.zeros_initializer(),
-                            padding='VALID')
-        layer = layer.max_pooling2d(layer, [2,2])
-        layer = layer.conv2d(layer, 64, [3,3],
-                            activation=tf.nn.relu,
-                            kernel_initializer=tf.truncated_normal_initializer(10.0,5.0),
-                            bias_initializer=tf.zeros_initializer(),
-                            padding='VALID')
-        layer = layer.max_pooling2d(layer, [2,2])
-        layer = layer.conv2d(layer, 64, [2,2],
-                            activation=tf.nn.relu,
-                            kernel_initializer=tf.truncated_normal_initializer(10.0,5.0),
-                            bias_initializer=tf.zeros_initializer(),
-                            padding='VALID')
-        layer = layer.flatten(layer)
+                            
+        '''for var in tf.trainable_variables(scope=self.scope):
+            tf.summary.histogram(var.name, var)
+        merged_summary_op = tf.summary.merge_all()'''
+                            
+    def build_network(self, init_mean=-1.0, init_std=1.0):
+        layer = layers.conv2d(self.state_input, 32, [5,5],
+                              activation_fn=tf.nn.relu,
+                              weights_initializer=layers.xavier_initializer_conv2d(),
+                              biases_initializer=tf.zeros_initializer(),
+                              padding='SAME')
+        layer = layers.max_pool2d(layer, [2,2])
+        layer = layers.conv2d(layer, 64, [3,3],
+                              activation_fn=tf.nn.relu,
+                              weights_initializer=layers.xavier_initializer_conv2d(),
+                              biases_initializer=tf.zeros_initializer(),
+                              padding='SAME')
+        layer = layers.max_pool2d(layer, [2,2])
+        layer = layers.conv2d(layer, 64, [2,2],
+                              activation_fn=tf.nn.relu,
+                              weights_initializer=layers.xavier_initializer_conv2d(),
+                              biases_initializer=tf.zeros_initializer(),
+                              padding='SAME')
+        layer = layers.flatten(layer)
         
         with tf.variable_scope('actor'):
             self.actor = layers.fully_connected(layer,
                                                 128,
-                                                weight_initializer=tf.truncated_normal_initializer(10.0,5.0))
+                                                weights_initializer=layers.xavier_initializer(),
+                                                biases_initializer=tf.zeros_initializer(),
+                                                activation_fn=tf.nn.relu)
             self.actor = layers.fully_connected(self.actor,
                                                 self.action_size,
-                                                weight_initializer=tf.truncated_normal_initializer(10.0,5.0),
+                                                weights_initializer=layers.xavier_initializer(),
+                                                biases_initializer=tf.zeros_initializer(),
                                                 activation_fn=tf.nn.softmax)
-            self.actor_argmax = tf.argmax(self.actor,
-                                          axis=1,
-                                          output_type=tf.int32,
-                                          name='argmax')
 
         with tf.variable_scope('critic'):
             self.critic = layers.fully_connected(layer, 1,
-                                                 weight_initializer=tf.truncated_normal_initializer(10.0,5.0),
+                                                 weights_initializer=layers.xavier_initializer(),
+                                                 biases_initializer=tf.zeros_initializer(),
                                                  activation_fn=None)
             self.critic = tf.reshape(self.critic, [-1])
 
@@ -156,6 +160,7 @@ class ActorCritic():
     # Update global network with local gradients
     def update_global(self, feed_dict):
         al, cl, etrpy, _, __ = self.sess.run([self.actor_loss, self.critic_loss, self.entropy, self.update_a_op, self.update_c_op], feed_dict)
+        
         return al, cl, etrpy
 
     def pull_global(self):
