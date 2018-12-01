@@ -183,7 +183,7 @@ class ActorCritic():
                 self.rnn_state_ = tf.placeholder(tf.float32, [self.lstm_layers, 2, 1, 128])
                 self.rnn_init_state = np.zeros((self.lstm_layers, 2, 1, 128))
 
-                state_per_layer_list = tf.unpack(rnn_state_, axis=0)
+                state_per_layer_list = tf.unstack(self.rnn_state_, axis=0)
                 rnn_tuple_state = tuple(
                     [tf.nn.rnn_cell.LSTMStateTuple(state_per_layer_list[idx][0], state_per_layer_list[idx][1])
                      for idx in range(self.lstm_layers)]
@@ -192,7 +192,7 @@ class ActorCritic():
                 cell = tf.nn.rnn_cell.LSTMCell(128, name='lstm_cell')
                 cell = tf.nn.rnn_cell.MultiRNNCell([cell] * self.lstm_layers)
                 states_series, self.current_state = tf.nn.dynamic_rnn(cell,
-                                                                 tf.expand_dims(net, -1),
+                                                                 tf.expand_dims(net, [0]),
                                                                  initial_state=rnn_tuple_state,
                                                                  sequence_length=tf.shape(self.state_input)[:1])
                 net = tf.reshape(states_series, [-1, 128])
@@ -231,7 +231,7 @@ class ActorCritic():
             self.critic = tf.reshape(self.critic, [-1])
 
     # Update global network with local gradients
-    def update_global(self, feed_dict)
+    def update_global(self, feed_dict):
         self.sess.run(self.update_ops, feed_dict)
         al, cl, etrpy = self.sess.run([self.actor_loss, self.critic_loss, self.entropy], feed_dict)
         
