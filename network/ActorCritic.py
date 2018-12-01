@@ -34,6 +34,16 @@ class ActorCritic():
 
         Keyword arguments:
             pass
+
+        Note:
+            Any tensorflow holder is marked with underscore at the end of the name.
+                ex) action holder -> action_
+                    td_target holder -> td_target_
+                - Also indicating that the value will not pass on backpropagation.
+
+        TODO:
+            pass
+            
         """
 
         # Class Environment
@@ -47,6 +57,9 @@ class ActorCritic():
         self.global_step = global_step
         self.lstm_network = lstm_network
         self.separate_train = separate_train
+        
+        # Dimensions
+        self.lstm_layers = 10
         
         with tf.variable_scope(scope):
             self.local_step = tf.Variable(initial_step, trainable=False, name='local_step')
@@ -80,21 +93,24 @@ class ActorCritic():
                     # Optimizer
                     self.optimizer = tf.train.AdamOptimizer(self.lr_critic, name='Adam')
             else:
-                self.action_holder = tf.placeholder(shape=[None],dtype=tf.int32, name='action_holder')
-                self.action_OH = tf.one_hot(self.action_holder, action_size)
-                self.td_target_holder = tf.placeholder(shape=[None], dtype=tf.float32, name='td_target_holder')
-                self.advantage_holder = tf.placeholder(shape=[None], dtype=tf.float32, name='adv_holder')
+                self.action_ = tf.placeholder(shape=[None],dtype=tf.int32, name='action_holder')
+                self.action_OH = tf.one_hot(self.action_, action_size)
+                self.td_target_ = tf.placeholder(shape=[None], dtype=tf.float32, name='td_target_holder')
+                self.advantage_ = tf.placeholder(shape=[None], dtype=tf.float32, name='adv_holder')
+#                 self.likelihood_ = tf.placeholder(shape[None], dtype=tf.float32, name='likelihood_holder')
+#                 self.likelihood_cumprod_ = tf.placeholder(shape[None], dtype=tf.float32, name='likelihood_cumprod_holder')
 
                 with tf.device('/gpu:0'):
                     with tf.name_scope('train'):
                         # Critic (value) Loss
-                        td_error = self.td_target_holder - self.critic 
+                        td_error = self.td_target_ - self.critic 
                         self.entropy = -tf.reduce_mean(self.actor * tf.log(self.actor), name='entropy')
-                        self.critic_loss = tf.reduce_mean(tf.square(td_error), name='critic_loss')
+                        self.critic_loss = tf.reduce_mean(tf.square(td_error), #* self.likelihood_cumprod_),
+                                                          name='critic_loss')
 
                         # Actor Loss
                         obj_func = tf.log(tf.reduce_sum(self.actor * self.action_OH, 1))
-                        exp_v = obj_func * self.advantage_holder + entropy_beta * self.entropy
+                        exp_v = obj_func * self.advantage_ + entropy_beta * self.entropy
                         self.actor_loss = tf.reduce_mean(-exp_v, name='actor_loss')
                         
                         self.total_loss = critic_beta * self.critic_loss + self.actor_loss
@@ -164,26 +180,43 @@ class ActorCritic():
                                          activation_fn=tf.nn.elu)
 
             if self.lstm_network:
-                cell = tf.nn.rnn_cell.LSTMCell(128, state_is_tuple=True, name='lstm_cell')
-                cell_size, hidd_size = cell.state_size.c, cell.state_size.h
-                cell_init = np.zeros((1, cell_size), np.float32)
-                hidd_init = np.zeros((1, hidd_size), np.float32)
-                cell_in = tf.placeholder(tf.float32, [1, cell_size])
-                hidd_in = tf.placeholder(tf.float32, [1, hidd_size])
+                self.rnn_state_ = tf.placeholder(tf.float32, [self.lstm_layers, 2, 1, 128])
+                self.rnn_init_state = np.zeros((self.lstm_layers, 2, 1, 128))
 
-                self.state_init = [cell_init, hidd_init]
-                self.state_in = [cell_in, hidd_in]
-                rnn_in = tf.expand_dims(net,[0])
-                step_size=tf.shape(self.state_input)[:1]
-                state_in = rnn.LSTMStateTuple(cell_in, hidd_in)
-                lstm_outputs, lstm_state = tf.nn.dynamic_rnn(cell, rnn_in,
-                                                             initial_state   = state_in,
-                                                             sequence_length = step_size,
-                                                             time_major      = False)
-                lstm_cell, lstm_hidd = lstm_state
-                self.state_out = (lstm_cell[:1, :], lstm_hidd[:1, :])
-                net = tf.reshape(lstm_outputs, [-1,128])
+                state_per_layer_list = tf.unpack(rnn_state_, axis=0)
+                rnn_tuple_state = tuple(
+                    [tf.nn.rnn_cell.LSTMStateTuple(state_per_layer_list[idx][0], state_per_layer_list[idx][1])
+                     for idx in range(self.lstm_layers)]
+                )
 
+                cell = tf.nn.rnn_cell.LSTMCell(128, name='lstm_cell')
+                cell = tf.nn.rnn_cell.MultiRNNCell([cell] * self.lstm_layers)
+                states_series, self.current_state = tf.nn.dynamic_rnn(cell,
+                                                                 tf.expand_dims(net, -1),
+                                                                 initial_state=rnn_tuple_state,
+                                                                 sequence_length=tf.shape(self.state_input)[:1])
+                net = tf.reshape(states_series, [-1, 128])
+
+#                 cell = tf.nn.rnn_cell.LSTMCell(128, name='lstm_cell')
+#                 state_size, memory_size = cell.state_size.c, cell.state_size.h
+#                 state_init = np.zeros((1, state_size), np.float32)
+#                 memory_init = np.zeros((1, memory_size), np.float32)
+#                 rnn_state_ = tf.placeholder(tf.float32, [1, state_size])
+#                 rnn_memory_ = tf.placeholder(tf.float32, [1, memory_size])
+# 
+#                 self.state_init = [cell_init, hidd_init]
+#                 self.state_in = [cell_in, hidd_in]
+#                 step_size=tf.shape(self.state_input)[:1]
+#                 state_in = rnn.LSTMStateTuple(cell_in, hidd_in)
+#                 lstm_outputs, lstm_state = tf.nn.dynamic_rnn(cell,
+#                                                              tf.expand_dims(net,[0]),
+#                                                              initial_state   = state_in,
+#                                                              sequence_length = step_size,
+#                                                              time_major      = False)
+#                 lstm_cell, lstm_hidd = lstm_state
+#                 self.state_out = (lstm_cell[:1, :], lstm_hidd[:1, :])
+#                 net = tf.reshape(lstm_outputs, [-1,128])
+# 
             self.actor = layers.fully_connected(net,
                                                 self.action_size,
                                                 weights_initializer=layers.xavier_initializer(),
@@ -198,7 +231,7 @@ class ActorCritic():
             self.critic = tf.reshape(self.critic, [-1])
 
     # Update global network with local gradients
-    def update_global(self, feed_dict):
+    def update_global(self, feed_dict)
         self.sess.run(self.update_ops, feed_dict)
         al, cl, etrpy = self.sess.run([self.actor_loss, self.critic_loss, self.entropy], feed_dict)
         
@@ -210,7 +243,7 @@ class ActorCritic():
     # Choose Action
     def run_network(self, feed_dict):
         if self.lstm_network:
-            a_probs, critic, rnn_state = self.sess.run([self.actor, self.critic, self.state_out], feed_dict)
+            a_probs, critic, rnn_state = self.sess.run([self.actor, self.critic, self.current_state], feed_dict)
             return [np.random.choice(self.action_size, p=prob/sum(prob)) for prob in a_probs], critic, rnn_state
         else:
             a_probs, critic = self.sess.run([self.actor, self.critic], feed_dict)
