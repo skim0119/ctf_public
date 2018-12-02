@@ -59,7 +59,7 @@ class ActorCritic():
         self.separate_train = separate_train
         
         # Dimensions
-        self.lstm_layers = 10
+        self.lstm_layers = 3
         
         with tf.variable_scope(scope):
             self.local_step = tf.Variable(initial_step, trainable=False, name='local_step')
@@ -158,65 +158,49 @@ class ActorCritic():
         with tf.variable_scope('actor'):
             net = self.state_input
             net = layers.conv2d(net , 32, [5,5],
-                                activation_fn=tf.nn.elu,
+                                activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
                                 padding='SAME')
             net = layers.max_pool2d(net, [2,2])
             net = layers.conv2d(net, 64, [3,3],
-                                activation_fn=tf.nn.elu,
+                                activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
                                 padding='SAME')
             net = layers.max_pool2d(net, [2,2])
             net = layers.conv2d(net, 64, [2,2],
-                                activation_fn=tf.nn.elu,
+                                activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
                                 padding='SAME')
             net = layers.flatten(net)
-            net = layers.fully_connected(net,
-                                         128,
-                                         activation_fn=tf.nn.elu)
+            net = layers.fully_connected(net, 128)
 
             if self.lstm_network:
-                self.rnn_state_ = tf.placeholder(tf.float32, [self.lstm_layers, 2, 1, 128])
-                self.rnn_init_state = np.zeros((self.lstm_layers, 2, 1, 128))
+                self.rnn_state_ = tf.placeholder(tf.float32, [self.lstm_layers, 1, 128])
+                self.rnn_init_state = np.zeros((self.lstm_layers, 1, 128))
+                #self.rnn_state_ = tf.placeholder(tf.float32, [self.lstm_layers, 2, 1, 128])
+                #self.rnn_init_state = np.zeros((self.lstm_layers, 2, 1, 128))
 
                 state_per_layer_list = tf.unstack(self.rnn_state_, axis=0)
                 rnn_tuple_state = tuple(
-                    [tf.nn.rnn_cell.LSTMStateTuple(state_per_layer_list[idx][0], state_per_layer_list[idx][1])
-                     for idx in range(self.lstm_layers)]
+                    [holder_ for holder_ in state_per_layer_list]
                 )
+                #rnn_tuple_state = tuple(
+                #    [tf.nn.rnn_cell.LSTMStateTuple(state_per_layer_list[idx][0], state_per_layer_list[idx][1])
+                #     for idx in range(self.lstm_layers)]
+                #)
 
-                cell = tf.nn.rnn_cell.LSTMCell(128, name='lstm_cell')
+                cell = tf.nn.rnn_cell.GRUCell(128, name='gru_cell')
+                #cell = tf.nn.rnn_cell.LSTMCell(128, forget_bias=1, name='lstm_cell')
                 cell = tf.nn.rnn_cell.MultiRNNCell([cell] * self.lstm_layers)
                 states_series, self.current_state = tf.nn.dynamic_rnn(cell,
-                                                                 tf.expand_dims(net, [0]),
-                                                                 initial_state=rnn_tuple_state,
-                                                                 sequence_length=tf.shape(self.state_input)[:1])
-                net = tf.reshape(states_series, [-1, 128])
-
-#                 cell = tf.nn.rnn_cell.LSTMCell(128, name='lstm_cell')
-#                 state_size, memory_size = cell.state_size.c, cell.state_size.h
-#                 state_init = np.zeros((1, state_size), np.float32)
-#                 memory_init = np.zeros((1, memory_size), np.float32)
-#                 rnn_state_ = tf.placeholder(tf.float32, [1, state_size])
-#                 rnn_memory_ = tf.placeholder(tf.float32, [1, memory_size])
-# 
-#                 self.state_init = [cell_init, hidd_init]
-#                 self.state_in = [cell_in, hidd_in]
-#                 step_size=tf.shape(self.state_input)[:1]
-#                 state_in = rnn.LSTMStateTuple(cell_in, hidd_in)
-#                 lstm_outputs, lstm_state = tf.nn.dynamic_rnn(cell,
-#                                                              tf.expand_dims(net,[0]),
-#                                                              initial_state   = state_in,
-#                                                              sequence_length = step_size,
-#                                                              time_major      = False)
-#                 lstm_cell, lstm_hidd = lstm_state
-#                 self.state_out = (lstm_cell[:1, :], lstm_hidd[:1, :])
-#                 net = tf.reshape(lstm_outputs, [-1,128])
-# 
+                                                                      tf.expand_dims(net, [0]),
+                                                                      initial_state=rnn_tuple_state,
+                                                                      sequence_length=tf.shape(self.state_input)[:1])
+                net = tf.reshape(states_series[-1], [-1, 128])
+                
             self.actor = layers.fully_connected(net,
                                                 self.action_size,
                                                 weights_initializer=layers.xavier_initializer(),
@@ -224,7 +208,8 @@ class ActorCritic():
                                                 activation_fn=tf.nn.softmax)
 
         with tf.variable_scope('critic'):
-            self.critic = layers.fully_connected(net, 1,
+            self.critic = layers.fully_connected(net,
+                                                 1,
                                                  weights_initializer=layers.xavier_initializer(),
                                                  biases_initializer=tf.zeros_initializer(),
                                                  activation_fn=None)
