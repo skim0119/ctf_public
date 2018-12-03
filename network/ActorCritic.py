@@ -9,7 +9,30 @@ from network.base import base
 
 import utility
 
-class ActorCritic():
+class ActorCritic:
+    """Actor Critic Network Implementation for A3C (Tensorflow)
+
+    This module contains building network and pipelines to sync with global network.
+    Global network is expected to have same network structure.
+    Actor Critic is implemented with convolution network and fully connected network.
+        - LSTM will be added depending on the settings
+
+    Attributes:
+        @ Private
+        _build_network : 
+
+        @ Public
+        run_network :
+
+        update_global :
+
+        pull_global :
+
+
+    Todo:
+        pass
+
+    """
     def __init__(self,
                  in_size,
                  action_size,
@@ -42,7 +65,8 @@ class ActorCritic():
                 - Also indicating that the value will not pass on backpropagation.
 
         TODO:
-            pass
+            * Separate the building trainsequence to separete method.
+            * Organize the code with pep8 formating
             
         """
 
@@ -64,10 +88,18 @@ class ActorCritic():
         with tf.variable_scope(scope):
             self.local_step = tf.Variable(initial_step, trainable=False, name='local_step')
             # Learning Rate Variables
-            self.lr_actor = tf.train.exponential_decay(lr_actor, self.local_step,
-                                                       lr_a_step, lr_a_gamma, staircase=True, name='lr_actor')
-            self.lr_critic = tf.train.exponential_decay(lr_critic, self.local_step,
-                                                       lr_c_step, lr_c_gamma, staircase=True, name='lr_critic')
+            self.lr_actor = tf.train.exponential_decay(lr_actor,
+                                                       self.local_step,
+                                                       lr_a_step,
+                                                       lr_a_gamma,
+                                                       staircase=True,
+                                                       name='lr_actor')
+            self.lr_critic = tf.train.exponential_decay(lr_critic,
+                                                        self.local_step,
+                                                       lr_c_step,
+                                                       lr_c_gamma,
+                                                       staircase=True,
+                                                       name='lr_critic')
 
 
             # global Network
@@ -75,11 +107,10 @@ class ActorCritic():
             self.state_input = tf.placeholder(shape=in_size,dtype=tf.float32, name='state')
 
             # get the parameters of actor and critic networks
-            self.build_network()
+            self._build_network()
             if self.separate_train:
                 self.a_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/actor')
                 self.c_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/critic')
-                
             else:
                 self.graph_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope)
                 
@@ -154,7 +185,7 @@ class ActorCritic():
                             with tf.name_scope('push'):
                                 self.update_ops = global_network.optimizer.apply_gradients(zip(grads, global_network.graph_vars))
                             
-    def build_network(self, init_mean=-1.0, init_std=1.0):
+    def _build_network(self):
         with tf.variable_scope('actor'):
             net = self.state_input
             net = layers.conv2d(net , 32, [5,5],
@@ -184,9 +215,7 @@ class ActorCritic():
                 #self.rnn_init_state = np.zeros((self.lstm_layers, 2, 1, 128))
 
                 state_per_layer_list = tf.unstack(self.rnn_state_, axis=0)
-                rnn_tuple_state = tuple(
-                    [holder_ for holder_ in state_per_layer_list]
-                )
+                rnn_tuple_state = tuple([holder_ for holder_ in state_per_layer_list])
                 #rnn_tuple_state = tuple(
                 #    [tf.nn.rnn_cell.LSTMStateTuple(state_per_layer_list[idx][0], state_per_layer_list[idx][1])
                 #     for idx in range(self.lstm_layers)]
@@ -216,14 +245,6 @@ class ActorCritic():
             self.critic = tf.reshape(self.critic, [-1])
 
     # Update global network with local gradients
-    def update_global(self, feed_dict):
-        self.sess.run(self.update_ops, feed_dict)
-        al, cl, etrpy = self.sess.run([self.actor_loss, self.critic_loss, self.entropy], feed_dict)
-        
-        return al, cl, etrpy
-
-    def pull_global(self):
-        self.sess.run(self.pull_op)
 
     # Choose Action
     def run_network(self, feed_dict):
@@ -233,3 +254,13 @@ class ActorCritic():
         else:
             a_probs, critic = self.sess.run([self.actor, self.critic], feed_dict)
             return [np.random.choice(self.action_size, p=prob/sum(prob)) for prob in a_probs], critic, None  
+
+    def update_global(self, feed_dict):
+        self.sess.run(self.update_ops, feed_dict)
+        al, cl, etrpy = self.sess.run([self.actor_loss, self.critic_loss, self.entropy], feed_dict)
+        
+        return al, cl, etrpy
+
+    def pull_global(self):
+        self.sess.run(self.pull_op)
+
