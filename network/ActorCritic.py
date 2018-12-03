@@ -59,7 +59,7 @@ class ActorCritic():
         self.separate_train = separate_train
         
         # Dimensions
-        self.lstm_layers = 3
+        self.lstm_layers = 1
         
         with tf.variable_scope(scope):
             self.local_step = tf.Variable(initial_step, trainable=False, name='local_step')
@@ -178,10 +178,11 @@ class ActorCritic():
             net = layers.fully_connected(net, 128)
 
             if self.lstm_network:
-                self.rnn_state_ = tf.placeholder(tf.float32, [self.lstm_layers, 1, 128])
-                self.rnn_init_state = np.zeros((self.lstm_layers, 1, 128))
-                #self.rnn_state_ = tf.placeholder(tf.float32, [self.lstm_layers, 2, 1, 128])
-                #self.rnn_init_state = np.zeros((self.lstm_layers, 2, 1, 128))
+                rnn_steps = 16
+                self.rnn_state_ = tf.placeholder(tf.float32, [self.lstm_layers, 1, rnn_steps])
+                self.rnn_init_state = np.zeros((self.lstm_layers, 1, rnn_steps))
+                #self.rnn_state_ = tf.placeholder(tf.float32, [self.lstm_layers, 2, 1, rnn_steps])
+                #self.rnn_init_state = np.zeros((self.lstm_layers, 2, 1, rnn_steps))
 
                 state_per_layer_list = tf.unstack(self.rnn_state_, axis=0)
                 rnn_tuple_state = tuple(
@@ -192,14 +193,15 @@ class ActorCritic():
                 #     for idx in range(self.lstm_layers)]
                 #)
 
-                cell = tf.nn.rnn_cell.GRUCell(128, name='gru_cell')
-                #cell = tf.nn.rnn_cell.LSTMCell(128, forget_bias=1, name='lstm_cell')
+                cell = tf.nn.rnn_cell.GRUCell(rnn_steps, name='gru_cell')
+                #cell = tf.nn.rnn_cell.LSTMCell(rnn_steps, forget_bias=1, name='lstm_cell')
                 cell = tf.nn.rnn_cell.MultiRNNCell([cell] * self.lstm_layers)
                 states_series, self.current_state = tf.nn.dynamic_rnn(cell,
                                                                       tf.expand_dims(net, [0]),
                                                                       initial_state=rnn_tuple_state,
-                                                                      sequence_length=tf.shape(self.state_input)[:1])
-                net = tf.reshape(states_series[-1], [-1, 128])
+                                                                      sequence_length=tf.shape(self.state_input)[:1]
+                                                                      )
+                net = tf.reshape(states_series[-1], [-1, rnn_steps])
                 
             self.actor = layers.fully_connected(net,
                                                 self.action_size,
