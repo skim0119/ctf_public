@@ -188,31 +188,39 @@ class ActorCritic:
     def _build_network(self):
         with tf.variable_scope('actor'):
             net = self.state_input
-            net = layers.conv2d(net , 32, [5,5],
-                                activation_fn=tf.nn.relu,
-                                weights_initializer=layers.xavier_initializer_conv2d(),
-                                biases_initializer=tf.zeros_initializer(),
-                                padding='SAME')
-            net = layers.max_pool2d(net, [2,2])
-            net = layers.conv2d(net, 64, [3,3],
-                                activation_fn=tf.nn.relu,
-                                weights_initializer=layers.xavier_initializer_conv2d(),
-                                biases_initializer=tf.zeros_initializer(),
-                                padding='SAME')
-            net = layers.max_pool2d(net, [2,2])
-            net = layers.conv2d(net, 64, [2,2],
-                                activation_fn=tf.nn.relu,
-                                weights_initializer=layers.xavier_initializer_conv2d(),
-                                biases_initializer=tf.zeros_initializer(),
-                                padding='SAME')
-            net = layers.flatten(net)
-            net = layers.fully_connected(net, 128)
-
             if self.lstm_network:
-                rnn_steps = 16
-                self.rnn_state_ = tf.placeholder(tf.float32, [self.lstm_layers, 1, rnn_steps])
-                self.rnn_init_state = np.zeros((self.lstm_layers, 1, rnn_steps))
-                #self.rnn_state_ = tf.placeholder(tf.float32, [self.lstm_layers, 2, 1, rnn_steps])
+                cells = []
+                in_size_1 = [19,19,6]
+                in_size_2 = [19,19,32]
+                in_size_3 = [19,19,64]
+                rnn_size = [3, 1, 2]+in_size_1
+                self.rnn_state_ = tf.placeholder(tf.float32, rnn_size)
+                self.rnn_init_state = np.zeros(rnn_size)
+
+                cell1 = tf.nn.rnn_cell.ConvLSTMCell(conv_ndims=2,
+                                         input_shape=in_size_1,
+                                         output_channels=32,
+                                         kernel_shape=[5,5],
+                                         forget_bias=1.0)
+                cell2 = tf.nn.rnn_cell.ConvLSTMCell(conv_ndims=2,
+                                         input_shape=in_size_1,
+                                         output_channels=64,
+                                         kernel_shape=[3,3],
+                                         forget_bias=1.0)
+                cell3 = tf.nn.rnn_cell.ConvLSTMCell(conv_ndims=2,
+                                         input_shape=in_size_3,
+                                         output_channels=64,
+                                         kernel_shape=[2,2],
+                                         forget_bias=1.0)
+                cell = tf.nn.tf.nn.rnn_cell.MultiRNNCell([cell1, cell2, cell3])
+                states_series, self.current_state = tf.nn.dynamic_rnn(cell,
+                                                                      tf.expand_dims(net, [0]),
+                                                                      initial_state=rnn_tuple_state,
+                                                                      sequence_length=tf.shape(self.state_input)[:1]
+                                                                      )
+                net = tf.reshape(states_series[-1], [-1, rnn_steps])
+
+                '''#self.rnn_state_ = tf.placeholder(tf.float32, [self.lstm_layers, 2, 1, rnn_steps])
                 #self.rnn_init_state = np.zeros((self.lstm_layers, 2, 1, rnn_steps))
 
                 state_per_layer_list = tf.unstack(self.rnn_state_, axis=0)
@@ -231,7 +239,29 @@ class ActorCritic:
                                                                       sequence_length=tf.shape(self.state_input)[:1]
                                                                       )
                 net = tf.reshape(states_series[-1], [-1, rnn_steps])
+                '''
                 
+            else:
+                net = layers.conv2d(net , 32, [5,5],
+                                    activation_fn=tf.nn.relu,
+                                    weights_initializer=layers.xavier_initializer_conv2d(),
+                                    biases_initializer=tf.zeros_initializer(),
+                                    padding='SAME')
+                net = layers.max_pool2d(net, [2,2])
+                net = layers.conv2d(net, 64, [3,3],
+                                    activation_fn=tf.nn.relu,
+                                    weights_initializer=layers.xavier_initializer_conv2d(),
+                                    biases_initializer=tf.zeros_initializer(),
+                                    padding='SAME')
+                net = layers.max_pool2d(net, [2,2])
+                net = layers.conv2d(net, 64, [2,2],
+                                    activation_fn=tf.nn.relu,
+                                    weights_initializer=layers.xavier_initializer_conv2d(),
+                                    biases_initializer=tf.zeros_initializer(),
+                                    padding='SAME')
+                net = layers.flatten(net)
+                net = layers.fully_connected(net, 128)
+
             self.actor = layers.fully_connected(net,
                                                 self.action_size,
                                                 weights_initializer=layers.xavier_initializer(),
