@@ -78,12 +78,13 @@ class Population():
         self.global_step     = global_step
         self.num_policy_pool = num_policy_pool
         self.num_agent       = num_agent
+        self.entropy_beta    = entropy_beta
         self.allow_policy_share = allow_policy_share
         self.is_global  = (scope == 'global')
 
         self.retrace_lambda = 0.202
 
-        with tf.variable_scope(scope):
+        with tf.name_scope(scope):
             ## Learning Rate Variables and Parameters
             self.local_step = tf.Variable(initial_step,
                                           trainable=False,
@@ -120,7 +121,7 @@ class Population():
                                              name='state_input_hold')
                 actor, a_vars = self._build_actor_network(state_input_, policyID)
 
-                self.state_input_list.append(state_input)
+                self.state_input_list.append(state_input_)
                 self.actor_list.append(actor)
                 self.a_vars_list.append(a_vars)
                 
@@ -129,12 +130,11 @@ class Population():
             ## Local Network (Trainer)
             if not self.is_global:
                 self.policy_index = self.select_policy(pull=False) # reset policy index
-                _build_actor_loss()
-                _build_critic_loss()
-                _build_gradient()
-                _build_pipeline()
+                self._build_actor_loss()
+                self._build_critic_loss()
+                self._build_gradient()
+                self._build_pipeline()
 
-    @Network_Builders
     def _build_actor_network(self, state_input, policy_id):
         scope = 'actor'+str(policy_id)
 
@@ -143,17 +143,17 @@ class Population():
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
                                 padding='SAME')
-            net = layers.max_pool2d(layer, [2,2])
-            net = layers.conv2d(layer, 64, [3,3], activation_fn=tf.nn.relu,
+            net = layers.max_pool2d(net, [2,2])
+            net = layers.conv2d(net, 64, [3,3], activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
                                 padding='SAME')
-            net = layers.max_pool2d(layer, [2,2])
-            net = layers.conv2d(layer, 64, [2,2], activation_fn=tf.nn.relu,
+            net = layers.max_pool2d(net, [2,2])
+            net = layers.conv2d(net, 64, [2,2], activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
                                 padding='SAME')
-            net = layers.flatten(layer)
+            net = layers.flatten(net)
 
             net = layers.fully_connected(net, 128)
             net = layers.fully_connected(net, self.action_size,
@@ -161,7 +161,7 @@ class Population():
             
         vars_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/'+scope)
 
-        return actor, vars_list
+        return net, vars_list
     
     def _build_critic_network(self):
         """ Common shared critic. Take the observation(state) from all agencies
@@ -179,18 +179,17 @@ class Population():
                                     weights_initializer=layers.xavier_initializer_conv2d(),
                                     biases_initializer=tf.zeros_initializer(),
                                     padding='SAME')
-                net = layers.max_pool2d(layer, [2,2])
-                net = layers.conv2d(layer,
+                net = layers.max_pool2d(net, [2,2])
+                net = layers.conv2d(net,
                                     64,
                                     [2,2],
                                     activation_fn=tf.nn.elu,
                                     weights_initializer=layers.xavier_initializer_conv2d(),
                                     biases_initializer=tf.zeros_initializer(),
                                     padding='SAME')
-                net = layers.flatten(layer)
+                net = layers.flatten(net)
                 net = layers.fully_connected(net, 128)
-                net = layers.fully_connected(net, 1, activation_fn=None)
-                nets.append(net)
+                nets.append(layers.fully_connected(net, 1, activation_fn=None))
 
             net = layers.fully_connected(tf.concat(nets,1), 1, activation_fn=None)
             net = tf.reshape(net, [-1])
@@ -216,13 +215,13 @@ class Population():
 
                 entropy = -tf.reduce_mean(actor * tf.log(actor), name='entropy')
                 obj_func = tf.log(tf.reduce_sum(actor * action_OH, 1)) 
-                exp_v = obj_func * adv_ * retrace_ + entropy_beta * entropy
+                exp_v = obj_func * adv_ * retrace_ + self.entropy_beta * entropy
                 actor_loss = tf.reduce_mean(-exp_v, name='actor_loss')
 
                 self.action_holder_list.append(action_)
                 self.adv_holder_list.append(adv_)
                 self.actor_loss_list.append(actor_loss)
-                self.retrace_holder_list.append(sample_prob_)
+                self.retrace_holder_list.append(retrace_)
 
     def _build_critic_loss(self):
         ## Make sure critic can get the require result
@@ -259,9 +258,8 @@ class Population():
         with tf.name_scope('push'):
             for opt, lGrads, gVars in zip(self.a_opt_list, self.a_grads_list, self.global_network.a_vars_list):
                 self.update_a_ops.append(opt.apply_gradients(zip(lGrads, gVars)))
-            self.update_c_ops = self.c_opt.apply_gradient(zip(self.c_grads, self.global_network.c_vars))
+            self.update_c_ops = self.c_opt.apply_gradients(zip(self.c_grads, self.global_network.c_vars))
 
-    @Manipulation
     def update_full(self, states, actions, advs, td_targets, beta_policies):
         ## Complete update for actor policies and critic
         # All parameters are given for each agents
@@ -273,8 +271,8 @@ class Population():
             policy_id = self.policy_index[idx]
             feed_dict = {self.global_network.state_input_list[policy_id] : np.stack(s)}
             soft_prob = self.global_network.sess.run(self.global_network.actor_list[policy_id], feed_dict)
-            target_policy = np.array([ar[act] for ar, act in zip(soft_prob,action)])
-            retrace_weight = retrace(target_policy, beta_policy, self.retrace_lambda)
+            target_policy = np.array([ar[act] for ar, act in zip(soft_prob,a)])
+            retrace_weight = retrace(target_policy, beta, self.retrace_lambda)
             retrace_prod = np.cumprod(retrace_weight)
 
             # Update specific policy
@@ -289,8 +287,7 @@ class Population():
             feed_dict = {}
             for idx, s in enumerate(states):
                 feed_dict[self.critic_state_input[idx]] = np.stack(s)
-            feed_dict[self.critic_state_input[0]], feed_dict[self.critic_state_input[idx]] = 
-                feed_dict[self.critic_state_input[idx]], feed_dict[self.critic_state_input[0]] # Swap 0 ~ idx
+            feed_dict[self.critic_state_input[0]], feed_dict[self.critic_state_input[idx]] = feed_dict[self.critic_state_input[idx]], feed_dict[self.critic_state_input[0]] # Swap 0 ~ idx
             feed_dict.update({self.td_target_holder : td,
                               self.retrace_prod_holder : retrace_prod})
             loss, _ = self.sess.run([self.critic_loss, self.update_c_ops], feed_dict)
@@ -310,11 +307,10 @@ class Population():
         a_probs = []
         for agent_id, policy_id in enumerate(self.policy_index):
             s = states[agent_id]
-            feed_dict = {self.state_input_list[policy_id] : np.stack(s)}
+            feed_dict = {self.state_input_list[policy_id] : np.expand_dims(s,axis=0)}
             for idx, s_ in enumerate(states):
-                feed_dict[self.critic_state_input[idx]] = np.stack(s_)
-            feed_dict[self.critic_state_input[0]], feed_dict[self.critic_state_input[idx]] = 
-                feed_dict[self.critic_state_input[idx]], feed_dict[self.critic_state_input[0]] # Swap 0 ~ idx
+                feed_dict[self.critic_state_input[idx]] = np.expand_dims(s_,axis=0)
+            feed_dict[self.critic_state_input[0]], feed_dict[self.critic_state_input[idx]] =  feed_dict[self.critic_state_input[idx]], feed_dict[self.critic_state_input[0]] # Swap 0 ~ idx
 
             a, c = self.sess.run([self.actor_list[policy_id], self.critic], feed_dict)
             a_probs.append(a[0])
