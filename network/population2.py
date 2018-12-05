@@ -166,7 +166,7 @@ class Population():
     def _build_critic_network(self):
         """ Common shared critic. Take the observation(state) from all agencies
             First observation state_inputs[0] must be the observation of 'self' agent. """
-        state_inputs = tf.placeholder(shape=self.in_size, dtype=tf.float32, name='cr_state_hold')
+        state_input = tf.placeholder(shape=self.in_size, dtype=tf.float32, name='cr_state_hold')
         scope = 'critic'
         with tf.variable_scope(scope):
             net = layers.conv2d(state_input,
@@ -186,12 +186,12 @@ class Population():
                                 padding='SAME')
             net = layers.flatten(net)
             net = layers.fully_connected(net, 128)
-            net = layers.fully_connected(net, 1, activation_fn=None))
+            net = layers.fully_connected(net, 1, activation_fn=None)
             net = tf.reshape(net, [-1])
 
         vars_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/'+scope)
 
-        return net, vars_list, state_inputs
+        return net, vars_list, state_input
 
     def _build_actor_loss(self):
         # Placeholders: pipeline for values
