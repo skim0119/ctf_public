@@ -296,6 +296,8 @@ class Population():
             loss, _ = self.sess.run([self.critic_loss, self.update_c_ops], feed_dict)
             c_loss.append(loss)
 
+        return np.mean(a_loss), np.mean(c_loss)
+
     def pull_global(self):
         ops = [self.pull_a_ops[i] for i in self.policy_index]
         ops.append(self.pull_c_ops)
