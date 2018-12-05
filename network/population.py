@@ -38,7 +38,7 @@ class Population():
                  sess            = None,
                  globalAC        = None,
                  num_policy_pool = 10,
-                 allowPolicyOverlap = False
+                 allow_policy_share= False
                  ):
         
         """ Initialize AC network and required parameters
@@ -77,7 +77,7 @@ class Population():
         self.global_step     = global_step
         self.num_policy_pool = num_policy_pool
         self.num_agent       = num_agent
-        self.allowPolicyOverlap = allowPolicyOverlap
+        self.allow_policy_share = allow_policy_share
         self.is_Global  = (scope == 'global')
 
         with tf.name_scope('Learning_Rate'):
@@ -311,7 +311,7 @@ class Population():
     # Policy Random Pool
     def select_policy(self, pull = True):
         assert not self.is_Global
-        if self.allowPolicyOverlap:
+        if self.allow_policy_share:
             policy_index = random.choices(range(self.num_policy_pool), k=self.num_agent)
         else:
             policy_index = random.sample(range(self.num_policy_pool), k=self.num_agent)
