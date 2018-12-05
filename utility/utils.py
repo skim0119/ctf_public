@@ -73,6 +73,43 @@ def normalize(r):
 
     return (r - np.mean(r)) / (np.std(r)+1e-8) # small addition to avoid dividing by zero
 
+def retrace(targets, behaviors, lambda_ = 0.2):
+    """ take target and behavior policy values, and return the retrace weight
+
+    Args:
+        target (1d array float): list of target policy values in series 
+            (policy of target network)
+        behavior (1d array float): list of target policy values in sequence
+            (policy of behavior network)
+        lambda_ (float): retrace coefficient
+
+    Returns:
+        weight (1D list)          : return retrace weight
+    """
+
+    weight = []
+    ratio = targets / behaviors
+    for r in ratio:
+        weight.append(lambda_ * min(1.0, r))
+
+    return np.array(weight)
+
+def retrace_prod(targets, behaviors, lambda_ = 0.2):
+    """ take target and behavior policy values, and return the cumulative product of weights
+
+    Args:
+        target (1d array float): list of target policy values in series 
+            (policy of target network)
+        behavior (1d array float): list of target policy values in sequence
+            (policy of behavior network)
+        lambda_ (float): retrace coefficient
+
+    Returns:
+        weight_cumulate (1D list) : return retrace weight in cumulative-product
+    """
+
+    return np.cumprod(retrace(targets, behaviors, lambda_))
+
 class MovingAverage:
     def __init__(self, size):
         self.ma = 0.0
