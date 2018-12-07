@@ -178,14 +178,14 @@ class Population():
 
         Variable:
             num_assist (int) : number of assisting state
-            state_input (placeholder) : state placeholder for critic evaluation
+            critic_state_input (placeholder) : state placeholder for critic evaluation
             assist_states (list placeholder) : state placeholder for assists critic evaluation
             assist_mask (boolean placeholder) : mask of assist inputs (Block if flowpath is blocked)
         """
 
         num_assist = self.num_agent-1
 
-        self.state_input = tf.placeholder(shape=self.in_size, dtype=tf.float32, name='cr_state_hold')
+        self.critic_state_input = tf.placeholder(shape=self.in_size, dtype=tf.float32, name='cr_state_hold')
         self.assist_states = [tf.placeholder(shape=self.in_size, dtype=tf.float32, name='assist_states')
                                 for _ in range(num_assist)]
         self.mask = tf.placeholder(shape=[None, self.num_agent], dtype=tf.float32, name='mask')
@@ -193,7 +193,7 @@ class Population():
         scope = 'critic'
         critic_evaluations = []
         with tf.variable_scope(scope, reuse=tf.AUTO_REUSE):
-            for input_tensor in [self.state_input]+self.assist_states: 
+            for input_tensor in [self.critic_state_input]+self.assist_states: 
                 net = layers.conv2d(input_tensor,
                                     32,
                                     [3,3],
@@ -213,10 +213,7 @@ class Population():
                 net = layers.fully_connected(net, 128)
                 net = layers.fully_connected(net, 1, activation_fn=None)
                 critic_evaluations.append(tf.reshape(net,[-1,1]))
-                #critic_evaluations.append(net)
-            print(critic_evaluations)
             net = tf.concat(critic_evaluations, 1) # [None, 4]
-            print(net)
             
             reweight = tf.get_variable(name='critic_reweight',
                                        shape=[self.num_agent],
@@ -229,9 +226,7 @@ class Population():
                                        initializer=tf.zeros_initializer
                                        )
             net = tf.multiply(net, reweight) + shift
-            print(net)
             net = tf.reduce_sum(tf.multiply(net, self.mask), axis=1)
-            print(net)
 
         vars_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/'+scope)
 
@@ -311,8 +306,7 @@ class Population():
         a_loss, c_loss = [], []
         for idx in range(self.num_agent):
             s, a, adv, td, beta = states[idx], actions[idx], advs[idx], td_targets[idx], beta_policies[idx]
-            assist_state, mask = assist_states[idx], masks[idx]
-
+            assist_state, mask = np.array(assist_states[idx].tolist()), masks[idx]
             # Compute retrace weight
             policy_id = self.policy_index[idx]
             feed_dict = {self.target_network.state_input_list[policy_id] : np.stack(s)}
@@ -336,7 +330,7 @@ class Population():
                          self.assist_states[0] : assist_state[:,0],
                          self.assist_states[1] : assist_state[:,1],
                          self.assist_states[2] : assist_state[:,2],
-                         self.mask : mask
+                         self.mask : np.stack(mask)
                          }
             loss, _ = self.sess.run([self.critic_loss, self.update_c_ops], feed_dict)
             c_loss.append(loss)
@@ -353,6 +347,7 @@ class Population():
 
     # Return action and critic
     def get_ac(self, states, mask=None):
+        states = states.tolist()
         action_prob = []
         critic_list = []
         if mask is None:
@@ -363,9 +358,9 @@ class Population():
             feed_dict = {self.state_input_list[policy_id] : np.expand_dims(s,axis=0),
                          self.critic_state_input : np.expand_dims(s,axis=0)}
             assist_states = states[:agent_id] + states[agent_id+1:]
-            for idx, state in enumerate(assist_states):
-                feed_dict[self.assist_states[idx]] = np.expand_dims(state,axis=0)
-            fed_dict[self.mask] = mask
+            for idx, ss in enumerate(assist_states):
+                feed_dict[self.assist_states[idx]] = np.expand_dims(ss,axis=0)
+            feed_dict[self.mask] = np.expand_dims(mask[agent_id:agent_id+1] + mask[:agent_id] + mask[agent_id+1:],axis=0)
 
             a, c = self.sess.run([self.actor_list[policy_id], self.critic], feed_dict)
             action_prob.append(a[0])
