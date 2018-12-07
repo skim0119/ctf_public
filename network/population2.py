@@ -93,56 +93,56 @@ class Population():
             # Update to self network
             self.target_network = self
 
-        with tf.name_scope(scope):
-            ## Learning Rate Variables and Parameters
+        ## Learning Rate Variables and Parameters
+        with tf.variable_scope(scope):
             self.local_step = tf.Variable(initial_step,
                                           trainable=False,
-                                          name='local_step')
+                                          name='local_step_'+scope)
             self.lr_actor = tf.train.exponential_decay(lr_actor,
                                                        self.local_step,
                                                        lr_a_decay_step,
                                                        lr_a_gamma,
                                                        staircase=True,
-                                                       name='lr_actor')
+                                                       name='lr_actor_'+scope)
             self.lr_critic = tf.train.exponential_decay(lr_critic,
                                                         self.local_step,
                                                         lr_c_decay_step,
                                                         lr_c_gamma,
                                                         staircase=True,
-                                                        name='lr_critic')
-            
-        with tf.variable_scope(scope), tf.device('/gpu:0'):
-            ## Optimizer
-            self.a_opt_list = [tf.train.AdamOptimizer(self.lr_actor) for _ in range(self.num_policy_pool)]
-            self.c_opt = tf.train.AdamOptimizer(self.lr_critic)
+                                                        name='lr_critic_'+scope)
 
-            ## Global Network ##
-            # Build actor network weights. (global network does not need training sequence)
-            # Create pool of policy to select from
-            self.state_input_list = []
-            self.actor_list       = []
-            self.a_vars_list      = []
+            with tf.device('/gpu:0'):
+                ## Optimizer
+                self.a_opt_list = [tf.train.AdamOptimizer(self.lr_actor) for _ in range(self.num_policy_pool)]
+                self.c_opt = tf.train.AdamOptimizer(self.lr_critic)
 
-            ## Set policy network
-            for policyID in range(self.num_policy_pool): # number of policy 
-                state_input_ = tf.placeholder(shape=self.in_size,
-                                             dtype=tf.float32,
-                                             name='state_input_hold')
-                actor, a_vars = self._build_actor_network(state_input_, policyID)
+                ## Global Network ##
+                # Build actor network weights. (global network does not need training sequence)
+                # Create pool of policy to select from
+                self.state_input_list = []
+                self.actor_list       = []
+                self.a_vars_list      = []
 
-                self.state_input_list.append(state_input_)
-                self.actor_list.append(actor)
-                self.a_vars_list.append(a_vars)
-                
-            self.critic, self.c_vars, self.critic_state_input = self._build_critic_network()
-                        
-            ## Local Network (Trainer)
-            if not self.is_global:
-                self.policy_index = self.select_policy(pull=False) # reset policy index
-                self._build_actor_loss()
-                self._build_critic_loss()
-                self._build_gradient()
-                self._build_pipeline()
+                ## Set policy network
+                for policyID in range(self.num_policy_pool): # number of policy 
+                    state_input_ = tf.placeholder(shape=self.in_size,
+                                                 dtype=tf.float32,
+                                                 name='state_input_hold')
+                    actor, a_vars = self._build_actor_network(state_input_, policyID)
+
+                    self.state_input_list.append(state_input_)
+                    self.actor_list.append(actor)
+                    self.a_vars_list.append(a_vars)
+
+                self.critic, self.c_vars, self.critic_state_input = self._build_critic_network()
+
+                ## Local Network (Trainer)
+                if not self.is_global:
+                    self.select_policy(pull=False) # reset policy index
+                    self._build_actor_loss()
+                    self._build_critic_loss()
+                    self._build_gradient()
+                    self._build_pipeline()
 
     def _build_actor_network(self, state_input, policy_id):
         scope = 'actor'+str(policy_id)
@@ -151,17 +151,17 @@ class Population():
             net = layers.conv2d(state_input, 32, [5,5], activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
-                                padding='SAME')
+                                padding='VALID')
             net = layers.max_pool2d(net, [2,2])
             net = layers.conv2d(net, 64, [3,3], activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
-                                padding='SAME')
+                                padding='VALID')
             net = layers.max_pool2d(net, [2,2])
             net = layers.conv2d(net, 64, [2,2], activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
-                                padding='SAME')
+                                padding='VALID')
             net = layers.flatten(net)
 
             net = layers.fully_connected(net, 128)
@@ -181,18 +181,18 @@ class Population():
             net = layers.conv2d(state_input,
                                 32,
                                 [3,3],
-                                activation_fn=tf.nn.elu,
+                                activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
-                                padding='SAME')
+                                padding='VALID')
             net = layers.max_pool2d(net, [2,2])
             net = layers.conv2d(net,
                                 64,
                                 [2,2],
-                                activation_fn=tf.nn.elu,
+                                activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
-                                padding='SAME')
+                                padding='VALID')
             net = layers.flatten(net)
             net = layers.fully_connected(net, 128)
             net = layers.fully_connected(net, 1, activation_fn=None)
@@ -300,7 +300,7 @@ class Population():
             loss, _ = self.sess.run([self.critic_loss, self.update_c_ops], feed_dict)
             c_loss.append(loss)
 
-        return np.mean(a_loss), np.mean(c_loss)
+        return a_loss, np.mean(c_loss)
 
     def pull_global(self):
         """ Pull from target network. Only if asynch training is on. """
@@ -312,8 +312,8 @@ class Population():
 
     # Return action and critic
     def get_ac(self, states):
-        critic_list = []
         action_prob = []
+        critic_list = []
         for agent_id, policy_id in enumerate(self.policy_index):
             s = states[agent_id]
             feed_dict = {self.state_input_list[policy_id] : np.expand_dims(s,axis=0),
@@ -325,7 +325,7 @@ class Population():
             
         action = [np.random.choice(self.action_size, p=prob/sum(prob)) for prob in action_prob]
         
-        return action, action_prob, [sum(critic_list) for _ in range(self.num_agent)]
+        return action, action_prob, critic_list
             
     # Policy Random Pool
     def select_policy(self, pull = True):
@@ -336,6 +336,7 @@ class Population():
             policy_index = random.sample(range(self.num_policy_pool), k=self.num_agent)
             
         policy_index.sort()
+        self.policy_index = policy_index
         if pull:
             self.pull_global()
         return policy_index
