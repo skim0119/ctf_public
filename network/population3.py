@@ -229,7 +229,7 @@ class Population():
             net = tf.multiply(net, reweight) + shift
             net = tf.boolean_mask(net, mask)
             net = tf.reduce_sum(net, axis=1)
-,
+
 
         vars_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/'+scope)
 
