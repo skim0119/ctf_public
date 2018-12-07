@@ -23,22 +23,23 @@ class Population():
                  action_size,
                  num_agent,
                  scope,
-                 decay_lr        = False,
-                 lr_actor        = 1e-4,
-                 lr_critic       = 1e-4,
-                 grad_clip_norm  = 0,
-                 global_step     = None,
-                 initial_step    = 0,
-                 trainable       = False,
-                 lr_a_gamma      = 1,
-                 lr_c_gamma      = 1,
-                 lr_a_decay_step = 0,
-                 lr_c_decay_step = 0,
-                 entropy_beta    = 0.001,
-                 sess            = None,
-                 global_network        = None,
-                 num_policy_pool = 10,
-                 allow_policy_share= False
+                 decay_lr           = False,
+                 lr_actor           = 1e-4,
+                 lr_critic          = 1e-4,
+                 grad_clip_norm     = 0,
+                 global_step        = None,
+                 initial_step       = 0,
+                 trainable          = False,
+                 lr_a_gamma         = 1,
+                 lr_c_gamma         = 1,
+                 lr_a_decay_step    = 0,
+                 lr_c_decay_step    = 0,
+                 entropy_beta       = 0.001,
+                 sess               = None,
+                 global_network     = None,
+                 num_policy_pool    = 10,
+                 allow_policy_share = False,
+                 asynch_training= True
                  ):
         
         """ Initialize AC network and required parameters
@@ -80,9 +81,17 @@ class Population():
         self.num_agent       = num_agent
         self.entropy_beta    = entropy_beta
         self.allow_policy_share = allow_policy_share
-        self.is_global  = (scope == 'global')
+        self.asynch_training = asynch_training
 
+        self.is_global  = (scope == 'global')
         self.retrace_lambda = 0.202
+
+        if self.asynch_training:
+            # Update to separte network
+            self.target_network = self.global_network
+        else:
+            # Update to self network
+            self.target_network = self
 
         with tf.name_scope(scope):
             ## Learning Rate Variables and Parameters
@@ -210,7 +219,10 @@ class Population():
 
                 entropy = -tf.reduce_mean(actor * tf.log(actor), name='entropy')
                 obj_func = tf.log(tf.reduce_sum(actor * action_OH, 1)) 
-                exp_v = obj_func * adv_ * retrace_ + self.entropy_beta * entropy
+                if self.asynch_training:
+                    exp_v = obj_func * adv_ * retrace_ + self.entropy_beta * entropy
+                else:
+                    exp_v = obj_func * adv_ + self.entropy_beta * entropy
                 actor_loss = tf.reduce_mean(-exp_v, name='actor_loss')
 
                 self.action_holder_list.append(action_)
@@ -225,7 +237,10 @@ class Population():
             self.retrace_prod_holder = tf.placeholder(shape=[None], dtype=tf.float32, name='sample_ratio_prod_hold')
 
             td_error = self.td_target_holder - self.critic
-            self.critic_loss = tf.reduce_mean(tf.square(td_error)*self.retrace_prod_holder, name='critic_loss')
+            if self.asynch_training:
+                self.critic_loss = tf.reduce_mean(tf.square(td_error)*self.retrace_prod_holder, name='critic_loss')
+            else:
+                self.critic_loss = tf.reduce_mean(tf.square(td_error), name='critic_loss')
 
     def _build_gradient(self):
         # Gradient
@@ -246,14 +261,14 @@ class Population():
 
         # Pull global weights to local weights
         with tf.name_scope('pull'):
-            for lVars, gVars in zip(self.a_vars_list, self.global_network.a_vars_list):
+            for lVars, gVars in zip(self.a_vars_list, self.target_network.a_vars_list):
                 self.pull_a_ops.append([lVar.assign(gVar) for lVar, gVar in zip(lVars, gVars)])
-            self.pull_c_ops = [lVar.assign(gVar) for lVar, gVar in zip(self.c_vars, self.global_network.c_vars)]
+            self.pull_c_ops = [lVar.assign(gVar) for lVar, gVar in zip(self.c_vars, self.target_network.c_vars)]
         # Push local weights to global weights
         with tf.name_scope('push'):
-            for opt, lGrads, gVars in zip(self.a_opt_list, self.a_grads_list, self.global_network.a_vars_list):
+            for opt, lGrads, gVars in zip(self.a_opt_list, self.a_grads_list, self.target_network.a_vars_list):
                 self.update_a_ops.append(opt.apply_gradients(zip(lGrads, gVars)))
-            self.update_c_ops = self.c_opt.apply_gradients(zip(self.c_grads, self.global_network.c_vars))
+            self.update_c_ops = self.c_opt.apply_gradients(zip(self.c_grads, self.target_network.c_vars))
 
     def update_full(self, states, actions, advs, td_targets, beta_policies):
         ## Complete update for actor policies and critic
@@ -264,8 +279,8 @@ class Population():
 
             # Compute retrace weight
             policy_id = self.policy_index[idx]
-            feed_dict = {self.global_network.state_input_list[policy_id] : np.stack(s)}
-            soft_prob = self.global_network.sess.run(self.global_network.actor_list[policy_id], feed_dict)
+            feed_dict = {self.target_network.state_input_list[policy_id] : np.stack(s)}
+            soft_prob = self.target_network.sess.run(self.target_network.actor_list[policy_id], feed_dict)
             target_policy = np.array([ar[act] for ar, act in zip(soft_prob,a)])
             retrace_weight = retrace(target_policy, beta, self.retrace_lambda)
             retrace_prod = np.cumprod(retrace_weight)
@@ -288,6 +303,8 @@ class Population():
         return np.mean(a_loss), np.mean(c_loss)
 
     def pull_global(self):
+        """ Pull from target network. Only if asynch training is on. """
+        assert self.asynch_training 
         ops = [self.pull_a_ops[i] for i in self.policy_index]
         ops.append(self.pull_c_ops)
 
