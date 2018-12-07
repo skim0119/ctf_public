@@ -188,12 +188,12 @@ class Population():
         self.state_input = tf.placeholder(shape=self.in_size, dtype=tf.float32, name='cr_state_hold')
         self.assist_states = [tf.placeholder(shape=self.in_size, dtype=tf.float32, name='assist_states')
                                 for _ in range(num_assist)]
-        self.mask = tf.placeholder(shape=[None, self.num_agent], dtype=tf.bool, name='mask')
+        self.mask = tf.placeholder(shape=[None, self.num_agent], dtype=tf.float32, name='mask')
 
         scope = 'critic'
-        critic_evaluations = [ ]
+        critic_evaluations = []
         with tf.variable_scope(scope, reuse=tf.AUTO_REUSE):
-            for input_tensor in [state_input]+assist_states: 
+            for input_tensor in [self.state_input]+self.assist_states: 
                 net = layers.conv2d(input_tensor,
                                     32,
                                     [3,3],
@@ -212,9 +212,11 @@ class Population():
                 net = layers.flatten(net)
                 net = layers.fully_connected(net, 128)
                 net = layers.fully_connected(net, 1, activation_fn=None)
-                net = tf.reshape(net, [-1])
-                critic_evaluations.append(tf.reshape(net,[-1]))
+                critic_evaluations.append(tf.reshape(net,[-1,1]))
+                #critic_evaluations.append(net)
+            print(critic_evaluations)
             net = tf.concat(critic_evaluations, 1) # [None, 4]
+            print(net)
             
             reweight = tf.get_variable(name='critic_reweight',
                                        shape=[self.num_agent],
@@ -224,12 +226,12 @@ class Population():
             shift = tf.get_variable(name='critic_shift',
                                        shape=[1],
                                        dtype=tf.float32,
-                                       initializer=tf.zeros
+                                       initializer=tf.zeros_initializer
                                        )
             net = tf.multiply(net, reweight) + shift
-            net = tf.boolean_mask(net, mask)
-            net = tf.reduce_sum(net, axis=1)
-
+            print(net)
+            net = tf.reduce_sum(tf.multiply(net, self.mask), axis=1)
+            print(net)
 
         vars_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/'+scope)
 
@@ -350,9 +352,11 @@ class Population():
         self.sess.run(ops)
 
     # Return action and critic
-    def get_ac(self, states, mask):
+    def get_ac(self, states, mask=None):
         action_prob = []
         critic_list = []
+        if mask is None:
+            mask = [1] * self.num_agent
         for agent_id, policy_id in enumerate(self.policy_index):
             # Construct feed dictionary
             s = states[agent_id]
@@ -372,7 +376,7 @@ class Population():
         return action, action_prob, critic_list
             
     # Policy Random Pool
-    def select_policy(self, pull = True):
+    def select_policy(self, pull=True):
         assert not self.is_global
         if self.allow_policy_share:
             policy_index = random.choices(range(self.num_policy_pool), k=self.num_agent)
