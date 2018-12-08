@@ -51,6 +51,7 @@ class ActorCritic:
                  critic_beta = 0.5,
                  sess=None,
                  global_network=None,
+                 lstm_network=False,
                  separate_train=False,
                  asynch_training=True):
         """ Initialize AC network and required parameters
@@ -79,9 +80,12 @@ class ActorCritic:
         self.grad_clip_norm = grad_clip_norm
         self.scope = scope
         self.global_step = global_step
+        self.lstm_network = lstm_network
         self.separate_train = separate_train
         self.asynch_training=asynch_training
         
+        # Dimensions
+        self.lstm_layers = 1
         
         with tf.variable_scope(scope):
             self.local_step = tf.Variable(initial_step, trainable=False, name='local_step')
@@ -102,10 +106,11 @@ class ActorCritic:
 
             # global Network
             # Build actor and critic network weights. (global network does not need training sequence)
-            self._build_actor_network()
-            self._build_critic_network()
+            self.state_input = tf.placeholder(shape=in_size,dtype=tf.float32, name='state')
+
+            # get the parameters of actor and critic networks
+            self._build_network()
             if self.separate_train:
-                # get the parameters of actor and critic networks
                 self.a_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/actor')
                 self.c_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/critic')
             else:
@@ -125,20 +130,20 @@ class ActorCritic:
                 self.action_OH = tf.one_hot(self.action_, action_size)
                 self.td_target_ = tf.placeholder(shape=[None], dtype=tf.float32, name='td_target_holder')
                 self.advantage_ = tf.placeholder(shape=[None], dtype=tf.float32, name='adv_holder')
-                self.retrace_ = tf.placeholder(shape[None], dtype=tf.float32, name='retrace_holder')
-                self.retrace_prod_ = tf.placeholder(shape[None], dtype=tf.float32, name='retrace_prod_holder')
+#                 self.likelihood_ = tf.placeholder(shape[None], dtype=tf.float32, name='likelihood_holder')
+#                 self.likelihood_cumprod_ = tf.placeholder(shape[None], dtype=tf.float32, name='likelihood_cumprod_holder')
 
                 with tf.device('/gpu:0'):
                     with tf.name_scope('train'):
                         # Critic (value) Loss
                         td_error = self.td_target_ - self.critic 
                         self.entropy = -tf.reduce_mean(self.actor * tf.log(self.actor), name='entropy')
-                        self.critic_loss = tf.reduce_mean(tf.square(td_error*self.retrace_prod_),
+                        self.critic_loss = tf.reduce_mean(tf.square(td_error), #* self.likelihood_cumprod_),
                                                           name='critic_loss')
 
                         # Actor Loss
                         obj_func = tf.log(tf.reduce_sum(self.actor * self.action_OH, 1))
-                        exp_v = obj_func * self.advantage_ * self.retrace_ + entropy_beta * self.entropy
+                        exp_v = obj_func * self.advantage_ + entropy_beta * self.entropy
                         self.actor_loss = tf.reduce_mean(-exp_v, name='actor_loss')
                         
                         self.total_loss = critic_beta * self.critic_loss + self.actor_loss
@@ -182,12 +187,10 @@ class ActorCritic:
                             with tf.name_scope('push'):
                                 self.update_ops = global_network.optimizer.apply_gradients(zip(grads, global_network.graph_vars))
                             
-    def _build_actor_network(self):
+    def _build_network(self):
         with tf.variable_scope('actor'):
-            self.state_input = tf.placeholder(shape=self.in_size,dtype=tf.float32, name='state')
-
             net = self.state_input
-            net = layers.conv2d(net, 32, [5,5],
+            net = layers.conv2d(net , 32, [5,5],
                                 activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
@@ -205,47 +208,80 @@ class ActorCritic:
                                 biases_initializer=tf.zeros_initializer(),
                                 padding='SAME')
             net = layers.flatten(net)
-            self.serialized_net = layers.fully_connected(net, 128)
+            net = layers.fully_connected(net, 128)
+
+            if self.lstm_network:
+                '''rnn_size = [2, 1, 19, 19, 32]
+                self.rnn_state_ = tf.placeholder(tf.float32, rnn_size)
+                self.rnn_init_state = np.zeros(rnn_size)
+
+                state_per_layer_list = tf.split(net, 6, 3) # creates a list of leghth time_steps and one elemnt has the shape of (?, 400, 400, 1, 10)
+                state_per_layer_list = [net_ for net_ in state_per_layer_list] #remove the third dimention now one list elemnt has the shape of (?, 400, 400, 10)
+
+                cell = tf.contrib.rnn.ConvLSTMCell(conv_ndims=2, # ConvLSTMCell definition
+                                                   input_shape=[19, 19, 6],
+                                                   output_channels=32,
+                                                   kernel_shape=[2, 2],
+                                                   skip_connection=False)
+
+                state = cell.zero_state(1, dtype=tf.float32) #initial state is zero
+
+                with tf.variable_scope("ConvLSTM") as scope:  # as BasicLSTMCell # create the RNN with a loop
+                    for i, net_ in enumerate(state_per_layer_list):
+                        if i > 0:
+                            scope.reuse_variables()
+                        # ConvCell takes Tensor with size [1, 19, 19, 32].
+                        states_series, self.current_state = cell(net_,state)
+                net = layers.flatten(states_series[-1])'''
+
+                rnn_steps = 16
+                self.rnn_state_ = tf.placeholder(tf.float32, [self.lstm_layers, 1, rnn_steps])
+                self.rnn_init_state = np.zeros((self.lstm_layers, 1, rnn_steps))
+                #self.rnn_state_ = tf.placeholder(tf.float32, [self.lstm_layers, 2, 1, rnn_steps])
+                #self.rnn_init_state = np.zeros((self.lstm_layers, 2, 1, rnn_steps))
+
+                state_per_layer_list = tf.unstack(self.rnn_state_, axis=0)
+                rnn_tuple_state = tuple([holder_ for holder_ in state_per_layer_list])
+                #rnn_tuple_state = tuple(
+                #    [tf.nn.rnn_cell.LSTMStateTuple(state_per_layer_list[idx][0], state_per_layer_list[idx][1])
+                #     for idx in range(self.lstm_layers)]
+                #)
+
+                cell = tf.nn.rnn_cell.GRUCell(rnn_steps, name='gru_cell')
+                #cell = tf.nn.rnn_cell.LSTMCell(rnn_steps, forget_bias=1, name='lstm_cell')
+                cell = tf.nn.rnn_cell.MultiRNNCell([cell] * self.lstm_layers)
+                states_series, self.current_state = tf.nn.dynamic_rnn(cell,
+                                                                      tf.expand_dims(net, [0]),
+                                                                      initial_state=rnn_tuple_state,
+                                                                      sequence_length=tf.shape(self.state_input)[:1]
+                                                                      )
+                net = tf.reshape(states_series[-1], [-1, rnn_steps])
                 
-            self.actor = layers.fully_connected(self.serialized_net,
+                
+            self.actor = layers.fully_connected(net,
                                                 self.action_size,
                                                 weights_initializer=layers.xavier_initializer(),
                                                 biases_initializer=tf.zeros_initializer(),
                                                 activation_fn=tf.nn.softmax)
 
-    def _build_critic_network(self, in_net=None):
-        in_shape = self.in_size[0:1]
-        self.critic_state_input = tf.placeholder(shape=self.in_size, dtype=tf.float32, name='cr_state')
-        net = self.crtic_state_input
         with tf.variable_scope('critic'):
-            net = layers.conv2d(net, 32, [5,5],
-                                activation_fn=tf.nn.relu,
-                                weights_initializer=layers.xavier_initializer_conv2d(),
-                                biases_initializer=tf.zeros_initializer(),
-                                padding='SAME')
-            net = layers.max_pool2d(net, [2,2])
-            net = layers.conv2d(net, 64, [3,3],
-                                activation_fn=tf.nn.relu,
-                                weights_initializer=layers.xavier_initializer_conv2d(),
-                                biases_initializer=tf.zeros_initializer(),
-                                padding='SAME')
-            net = layers.max_pool2d(net, [2,2])
-            net = layers.conv2d(net, 64, [2,2],
-                                activation_fn=tf.nn.relu,
-                                weights_initializer=layers.xavier_initializer_conv2d(),
-                                biases_initializer=tf.zeros_initializer(),
-                                padding='SAME')
-            net = layers.flatten(net)
-            self.critic = layers.fully_connected(net, 1,
+            self.critic = layers.fully_connected(net,
+                                                 1,
                                                  weights_initializer=layers.xavier_initializer(),
                                                  biases_initializer=tf.zeros_initializer(),
                                                  activation_fn=None)
-            self.critic = tf.reshape(self.critic, [-1,1])
+            self.critic = tf.reshape(self.critic, [-1])
+
+    # Update global network with local gradients
 
     # Choose Action
     def run_network(self, feed_dict):
-        a_probs, critic = self.sess.run([self.actor, self.critic], feed_dict)
-        return [np.random.choice(self.action_size, p=prob/sum(prob)) for prob in a_probs], critic, None  
+        if self.lstm_network:
+            a_probs, critic, rnn_state = self.sess.run([self.actor, self.critic, self.current_state], feed_dict)
+            return [np.random.choice(self.action_size, p=prob/sum(prob)) for prob in a_probs], critic, rnn_state
+        else:
+            a_probs, critic = self.sess.run([self.actor, self.critic], feed_dict)
+            return [np.random.choice(self.action_size, p=prob/sum(prob)) for prob in a_probs], critic, None  
 
     def update_global(self, feed_dict):
         self.sess.run(self.update_ops, feed_dict)
