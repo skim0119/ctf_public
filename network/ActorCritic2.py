@@ -191,21 +191,27 @@ class ActorCritic:
                                 activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
-                                padding='SAME')
+                                padding='SAME',
+                                scope='conv1',
+                                reuse=tf.AUTO_REUSE)
             net = layers.max_pool2d(net, [2,2])
             net = layers.conv2d(net, 64, [3,3],
                                 activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
-                                padding='SAME')
+                                padding='SAME',
+                                scope='conv2',
+                                reuse=tf.AUTO_REUSE)
             net = layers.max_pool2d(net, [2,2])
             net = layers.conv2d(net, 64, [2,2],
                                 activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
-                                padding='SAME')
+                                padding='SAME',
+                                scope='conv3',
+                                reuse=tf.AUTO_REUSE)
             net = layers.flatten(net)
-            self.serialized_net = layers.fully_connected(net, 128)
+            self.serialized_net = layers.fully_connected(net, 128, name='dense1', reuse=tf.AUTO_REUSE)
                 
             self.actor = layers.fully_connected(self.serialized_net,
                                                 self.action_size,
@@ -214,27 +220,44 @@ class ActorCritic:
                                                 activation_fn=tf.nn.softmax)
 
     def _build_critic_network(self, in_net=None):
-        in_shape = self.in_size[0:1]
-        self.critic_state_input = tf.placeholder(shape=self.in_size, dtype=tf.float32, name='cr_state')
-        net = self.crtic_state_input
-        with tf.variable_scope('critic'):
+        in_shape = self.in_size[:1] + [self.num_agent] + self.in_size[1:]
+        self.critic_state_input = tf.placeholder(shape=in_shape, dtype=tf.float32, name='cr_state')
+        n_entry = tf.shape(self.critic_state_input)[0]
+        n_row = tf.shape(self.critic_state_input)[0] * tf.shape(self.critic_state_input)[1]
+        flat_shape = [n_row] + self.in_size[1:]
+        bulk_shape = tf.shape(self.critic_state_input)
+
+        net = tf.reshape(self.crtic_state_input, flat_shape)
+        with tf.variable_scope('actor/'):
             net = layers.conv2d(net, 32, [5,5],
                                 activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
-                                padding='SAME')
+                                padding='SAME',
+                                scope='conv1',
+                                reuse=tf.AUTO_REUSE)
             net = layers.max_pool2d(net, [2,2])
             net = layers.conv2d(net, 64, [3,3],
                                 activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
-                                padding='SAME')
+                                padding='SAME',
+                                scope='conv2',
+                                reuse=tf.AUTO_REUSE)
             net = layers.max_pool2d(net, [2,2])
             net = layers.conv2d(net, 64, [2,2],
                                 activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
-                                padding='SAME')
+                                padding='SAME',
+                                scope='conv3',
+                                reuse=tf.AUTO_REUSE)
+            net = layers.flatten(net)
+            net = layers.fully_connected(net, 128, name='dense1', reuse=tf.AUTO_REUSE)
+            net = tf.stop_gradient(net)
+        
+        with tf.variable_scope('critic'):
+            net = tf.reshape(net, [n_entry, self.num_agent, 128])
             net = layers.flatten(net)
             self.critic = layers.fully_connected(net, 1,
                                                  weights_initializer=layers.xavier_initializer(),
