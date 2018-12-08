@@ -192,7 +192,7 @@ class Population():
 
         scope = 'critic'
         critic_evaluations = []
-        with tf.variable_scope(scope, reuse=tf.AUTO_REUSE):
+        with tf.variable_scope(scope):
             for input_tensor in [self.critic_state_input]+self.assist_states: 
                 net = layers.conv2d(input_tensor,
                                     32,
@@ -200,7 +200,9 @@ class Population():
                                     activation_fn=tf.nn.relu,
                                     weights_initializer=layers.xavier_initializer_conv2d(),
                                     biases_initializer=tf.zeros_initializer(),
-                                    padding='VALID')
+                                    padding='VALID',
+                                    scope='conv1',
+                                    reuse=tf.AUTO_REUSE)
                 net = layers.max_pool2d(net, [2,2])
                 net = layers.conv2d(net,
                                     64,
@@ -208,25 +210,29 @@ class Population():
                                     activation_fn=tf.nn.relu,
                                     weights_initializer=layers.xavier_initializer_conv2d(),
                                     biases_initializer=tf.zeros_initializer(),
-                                    padding='VALID')
+                                    padding='VALID',
+                                    scope='conv2',
+                                    reuse=tf.AUTO_REUSE)
                 net = layers.flatten(net)
-                net = layers.fully_connected(net, 128)
-                net = layers.fully_connected(net, 1, activation_fn=None)
+                net = layers.fully_connected(net, 128, scope='dense1', reuse=tf.AUTO_REUSE)
+                net = layers.fully_connected(net, 1, activation_fn=None, scope='dense2', reuse=tf.AUTO_REUSE)
+                #if input_tensor in self.assist_states:
+                #    net = tf.stop_gradient(net)
                 critic_evaluations.append(tf.reshape(net,[-1,1]))
-            net = tf.concat(critic_evaluations, 1) # [None, 4]
-            
-            reweight = tf.get_variable(name='critic_reweight',
-                                       shape=[self.num_agent],
-                                       dtype=tf.float32,
-                                       initializer=tf.constant_initializer(value=1.0/self.num_agent)
-                                       )
-            shift = tf.get_variable(name='critic_shift',
-                                       shape=[1],
-                                       dtype=tf.float32,
-                                       initializer=tf.zeros_initializer
-                                       )
-            net = tf.multiply(net, reweight) + shift
-            net = tf.reduce_sum(tf.multiply(net, self.mask), axis=1)
+            with tf.name_scope('Concat'):
+                net = tf.concat(critic_evaluations, 1) # [None, 4]
+                reweight = tf.get_variable(name='critic_reweight',
+                                           shape=[self.num_agent],
+                                           dtype=tf.float32,
+                                           initializer=tf.constant_initializer(value=1.0/self.num_agent)
+                                           )
+                shift = tf.get_variable(name='critic_shift',
+                                           shape=[1],
+                                           dtype=tf.float32,
+                                           initializer=tf.zeros_initializer
+                                           )
+                net = tf.multiply(net, reweight) + shift
+                net = tf.reduce_sum(tf.multiply(net, self.mask), axis=1)
 
         vars_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/'+scope)
 
@@ -284,16 +290,18 @@ class Population():
 
     def _build_pipeline(self):
         # Sync with Global Network
-        self.pull_a_ops = []
-        self.pull_c_ops = []
+        if self.asynch_training:
+            self.pull_a_ops = []
+            self.pull_c_ops = []
+
+            # Pull global weights to local weights
+            with tf.name_scope('pull'):
+                for lVars, gVars in zip(self.a_vars_list, self.target_network.a_vars_list):
+                    self.pull_a_ops.append([lVar.assign(gVar) for lVar, gVar in zip(lVars, gVars)])
+                self.pull_c_ops = [lVar.assign(gVar) for lVar, gVar in zip(self.c_vars, self.target_network.c_vars)]
+            
         self.update_a_ops = []
         self.update_c_ops = []
-
-        # Pull global weights to local weights
-        with tf.name_scope('pull'):
-            for lVars, gVars in zip(self.a_vars_list, self.target_network.a_vars_list):
-                self.pull_a_ops.append([lVar.assign(gVar) for lVar, gVar in zip(lVars, gVars)])
-            self.pull_c_ops = [lVar.assign(gVar) for lVar, gVar in zip(self.c_vars, self.target_network.c_vars)]
         # Push local weights to global weights
         with tf.name_scope('push'):
             for opt, lGrads, gVars in zip(self.a_opt_list, self.a_grads_list, self.target_network.a_vars_list):
