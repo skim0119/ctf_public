@@ -36,6 +36,7 @@ class ActorCritic:
     def __init__(self,
                  in_size,
                  action_size,
+                 num_agent,
                  scope,
                  decay_lr=False,
                  lr_actor=1e-4,
@@ -51,7 +52,6 @@ class ActorCritic:
                  critic_beta = 0.5,
                  sess=None,
                  global_network=None,
-                 separate_train=False,
                  asynch_training=True):
         """ Initialize AC network and required parameters
 
@@ -77,9 +77,9 @@ class ActorCritic:
         self.in_size = in_size
         self.action_size = action_size
         self.grad_clip_norm = grad_clip_norm
+        self.num_agent = num_agent
         self.scope = scope
         self.global_step = global_step
-        self.separate_train = separate_train
         self.asynch_training=asynch_training
         
         
@@ -104,84 +104,58 @@ class ActorCritic:
             # Build actor and critic network weights. (global network does not need training sequence)
             self._build_actor_network()
             self._build_critic_network()
-            if self.separate_train:
-                # get the parameters of actor and critic networks
-                self.a_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/actor')
-                self.c_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/critic')
-            else:
-                self.graph_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope)
+            
+            # get the parameters of actor and critic networks
+            self.a_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/actor')
+            self.c_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/critic')
                 
             # Local Network
             if scope == 'global':
-                if self.separate_train:
-                    # Optimizer
-                    self.critic_optimizer = tf.train.AdamOptimizer(self.lr_critic, name='Adam_critic')
-                    self.actor_optimizer = tf.train.AdamOptimizer(self.lr_actor, name='Adam_actor')
-                else:
-                    # Optimizer
-                    self.optimizer = tf.train.AdamOptimizer(self.lr_critic, name='Adam')
+                # Optimizer
+                self.critic_optimizer = tf.train.AdamOptimizer(self.lr_critic, name='Adam_critic')
+                self.actor_optimizer = tf.train.AdamOptimizer(self.lr_actor, name='Adam_actor')
             else:
                 self.action_ = tf.placeholder(shape=[None],dtype=tf.int32, name='action_holder')
                 self.action_OH = tf.one_hot(self.action_, action_size)
                 self.td_target_ = tf.placeholder(shape=[None], dtype=tf.float32, name='td_target_holder')
-                self.advantage_ = tf.placeholder(shape=[None], dtype=tf.float32, name='adv_holder')
-                self.retrace_ = tf.placeholder(shape[None], dtype=tf.float32, name='retrace_holder')
-                self.retrace_prod_ = tf.placeholder(shape[None], dtype=tf.float32, name='retrace_prod_holder')
+                self.advantage_ = tf.placeholder(shape=[None,1], dtype=tf.float32, name='adv_holder')
 
                 with tf.device('/gpu:0'):
                     with tf.name_scope('train'):
                         # Critic (value) Loss
                         td_error = self.td_target_ - self.critic 
                         self.entropy = -tf.reduce_mean(self.actor * tf.log(self.actor), name='entropy')
-                        self.critic_loss = tf.reduce_mean(tf.square(td_error*self.retrace_prod_),
+                        self.critic_loss = tf.reduce_mean(tf.square(td_error),
                                                           name='critic_loss')
 
                         # Actor Loss
                         obj_func = tf.log(tf.reduce_sum(self.actor * self.action_OH, 1))
-                        exp_v = obj_func * self.advantage_ * self.retrace_ + entropy_beta * self.entropy
+                        exp_v = obj_func * self.advantage_ + entropy_beta * self.entropy
                         self.actor_loss = tf.reduce_mean(-exp_v, name='actor_loss')
                         
                         self.total_loss = critic_beta * self.critic_loss + self.actor_loss
 
-                    if self.separate_train:
-                        with tf.name_scope('local_grad'):
-                            a_grads = tf.gradients(self.actor_loss, self.a_vars)
-                            c_grads = tf.gradients(self.critic_loss, self.c_vars)
-                            if self.grad_clip_norm:
-                                a_grads = [(tf.clip_by_norm(grad, self.grad_clip_norm), var) for grad, var in a_grads if not grad is None]
-                                c_grads = [(tf.clip_by_norm(grad, self.grad_clip_norm), var) for grad, var in c_grads if not grad is None]
+                    with tf.name_scope('local_grad'):
+                        a_grads = tf.gradients(self.actor_loss, self.a_vars)
+                        c_grads = tf.gradients(self.critic_loss, self.c_vars)
+                        if self.grad_clip_norm:
+                            a_grads = [(tf.clip_by_norm(grad, self.grad_clip_norm), var) for grad, var in a_grads if not grad is None]
+                            c_grads = [(tf.clip_by_norm(grad, self.grad_clip_norm), var) for grad, var in c_grads if not grad is None]
 
-                        # Sync with Global Network
-                        with tf.name_scope('sync'):
-                            # Pull global weights to local weights
-                            with tf.name_scope('pull'):
-                                pull_a_vars_op = [local_var.assign(glob_var) for local_var, glob_var in zip(self.a_vars, global_network.a_vars)]
-                                pull_c_vars_op = [local_var.assign(glob_var) for local_var, glob_var in zip(self.c_vars, global_network.c_vars)]
-                                self.pull_op = tf.group(pull_a_vars_op, pull_c_vars_op)
+                    # Sync with Global Network
+                    with tf.name_scope('sync'):
+                        # Pull global weights to local weights
+                        with tf.name_scope('pull'):
+                            pull_a_vars_op = [local_var.assign(glob_var) for local_var, glob_var in zip(self.a_vars, global_network.a_vars)]
+                            pull_c_vars_op = [local_var.assign(glob_var) for local_var, glob_var in zip(self.c_vars, global_network.c_vars)]
+                            self.pull_op = tf.group(pull_a_vars_op, pull_c_vars_op)
 
-                            # Push local weights to global weights
-                            with tf.name_scope('push'):
-                                update_a_op = global_network.actor_optimizer.apply_gradients(zip(a_grads, global_network.a_vars))
-                                update_c_op = global_network.critic_optimizer.apply_gradients(zip(c_grads, global_network.c_vars))
-                                self.update_ops = tf.group(update_a_op, update_c_op)
-                            
-                    else:
-                        with tf.name_scope('local_grad'):
-                            grads = tf.gradients(self.total_loss, self.graph_vars)
-                            if self.grad_clip_norm:
-                                grads = [(tf.clip_by_norm(grad, self.grad_clip_norm), var) for grad, var in grads if not grad is None]
+                        # Push local weights to global weights
+                        with tf.name_scope('push'):
+                            update_a_op = global_network.actor_optimizer.apply_gradients(zip(a_grads, global_network.a_vars))
+                            update_c_op = global_network.critic_optimizer.apply_gradients(zip(c_grads, global_network.c_vars))
+                            self.update_ops = tf.group(update_a_op, update_c_op)
 
-                        # Sync with Global Network
-                        with tf.name_scope('sync'):
-                            # Pull global weights to local weights
-                            with tf.name_scope('pull'):
-                                self.pull_op = [local_var.assign(glob_var)
-                                                for local_var, glob_var in zip(self.graph_vars, global_network.graph_vars)]
-
-                            # Push local weights to global weights
-                            with tf.name_scope('push'):
-                                self.update_ops = global_network.optimizer.apply_gradients(zip(grads, global_network.graph_vars))
-                            
     def _build_actor_network(self):
         with tf.variable_scope('actor'):
             self.state_input = tf.placeholder(shape=self.in_size,dtype=tf.float32, name='state')
@@ -211,7 +185,7 @@ class ActorCritic:
                                 scope='conv3',
                                 reuse=tf.AUTO_REUSE)
             net = layers.flatten(net)
-            self.serialized_net = layers.fully_connected(net, 128, name='dense1', reuse=tf.AUTO_REUSE)
+            self.serialized_net = layers.fully_connected(net, 128, scope='dense1', reuse=tf.AUTO_REUSE)
                 
             self.actor = layers.fully_connected(self.serialized_net,
                                                 self.action_size,
@@ -220,15 +194,15 @@ class ActorCritic:
                                                 activation_fn=tf.nn.softmax)
 
     def _build_critic_network(self, in_net=None):
-        in_shape = self.in_size[:1] + [self.num_agent] + self.in_size[1:]
+        in_shape = [None, self.num_agent] + self.in_size[1:]
         self.critic_state_input = tf.placeholder(shape=in_shape, dtype=tf.float32, name='cr_state')
         n_entry = tf.shape(self.critic_state_input)[0]
         n_row = tf.shape(self.critic_state_input)[0] * tf.shape(self.critic_state_input)[1]
         flat_shape = [n_row] + self.in_size[1:]
         bulk_shape = tf.shape(self.critic_state_input)
 
-        net = tf.reshape(self.crtic_state_input, flat_shape)
-        with tf.variable_scope('actor/'):
+        net = tf.reshape(self.critic_state_input, flat_shape)
+        with tf.variable_scope('actor', reuse=tf.AUTO_REUSE):
             net = layers.conv2d(net, 32, [5,5],
                                 activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
@@ -253,7 +227,7 @@ class ActorCritic:
                                 scope='conv3',
                                 reuse=tf.AUTO_REUSE)
             net = layers.flatten(net)
-            net = layers.fully_connected(net, 128, name='dense1', reuse=tf.AUTO_REUSE)
+            net = layers.fully_connected(net, 128, scope='dense1', reuse=tf.AUTO_REUSE)
             net = tf.stop_gradient(net)
         
         with tf.variable_scope('critic'):
@@ -263,7 +237,7 @@ class ActorCritic:
                                                  weights_initializer=layers.xavier_initializer(),
                                                  biases_initializer=tf.zeros_initializer(),
                                                  activation_fn=None)
-            self.critic = tf.reshape(self.critic, [-1,1])
+            #self.critic = tf.reshape(self.critic, [-1,1])
 
     # Choose Action
     def run_network(self, feed_dict):
