@@ -118,7 +118,7 @@ class ActorCritic:
                 self.action_ = tf.placeholder(shape=[None],dtype=tf.int32, name='action_holder')
                 self.action_OH = tf.one_hot(self.action_, action_size)
                 self.td_target_ = tf.placeholder(shape=[None], dtype=tf.float32, name='td_target_holder')
-                self.advantage_ = tf.placeholder(shape=[None,1], dtype=tf.float32, name='adv_holder')
+                self.advantage_ = tf.placeholder(shape=[None], dtype=tf.float32, name='adv_holder')
 
                 with tf.device('/gpu:0'):
                     with tf.name_scope('train'):
@@ -194,9 +194,9 @@ class ActorCritic:
                                                 activation_fn=tf.nn.softmax)
 
     def _build_critic_network(self, in_net=None):
+        in_shape = [None, self.num_agent] + self.in_size[1:]
         self.critic_state_input = tf.placeholder(shape=in_shape, dtype=tf.float32, name='cr_state')
         self.mask = tf.placeholder(shape=[None, self.num_agent], dtype=tf.float32, name='mask')
-        in_shape = [None, self.num_agent] + self.in_size[1:]
         n_entry = tf.shape(self.critic_state_input)[0]
         n_row = tf.shape(self.critic_state_input)[0] * tf.shape(self.critic_state_input)[1]
         flat_shape = [n_row] + self.in_size[1:]
