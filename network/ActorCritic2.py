@@ -194,8 +194,9 @@ class ActorCritic:
                                                 activation_fn=tf.nn.softmax)
 
     def _build_critic_network(self, in_net=None):
-        in_shape = [None, self.num_agent] + self.in_size[1:]
         self.critic_state_input = tf.placeholder(shape=in_shape, dtype=tf.float32, name='cr_state')
+        self.mask = tf.placeholder(shape=[None, self.num_agent], dtype=tf.float32, name='mask')
+        in_shape = [None, self.num_agent] + self.in_size[1:]
         n_entry = tf.shape(self.critic_state_input)[0]
         n_row = tf.shape(self.critic_state_input)[0] * tf.shape(self.critic_state_input)[1]
         flat_shape = [n_row] + self.in_size[1:]
@@ -231,13 +232,24 @@ class ActorCritic:
             net = tf.stop_gradient(net)
         
         with tf.variable_scope('critic'):
-            net = tf.reshape(net, [n_entry, self.num_agent, 128])
-            net = layers.flatten(net)
-            self.critic = layers.fully_connected(net, 1,
-                                                 weights_initializer=layers.xavier_initializer(),
-                                                 biases_initializer=tf.zeros_initializer(),
-                                                 activation_fn=None)
-            #self.critic = tf.reshape(self.critic, [-1,1])
+            net = layers.fully_connected(net, 1,
+                                         weights_initializer=layers.xavier_initializer(),
+                                         biases_initializer=tf.zeros_initializer(),
+                                         activation_fn=None)
+            net = tf.reshape(net, [n_entry, self.num_agent])
+
+            reweight = tf.get_variable(name='critic_reweight',
+                                       shape=[self.num_agent],
+                                       dtype=tf.float32,
+                                       initializer=tf.constant_initializer(value=1.0/self.num_agent)
+                                       )
+            shift = tf.get_variable(name='critic_shift',
+                                       shape=[1],
+                                       dtype=tf.float32,
+                                       initializer=tf.zeros_initializer
+                                       )
+            net = tf.multiply(net, reweight) + shift
+            self.critic= tf.reduce_sum(tf.multiply(net, self.mask), axis=1)
 
     # Choose Action
     def run_network(self, feed_dict):
