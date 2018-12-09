@@ -103,12 +103,13 @@ def one_hot_encoder_v2(state, agents, vision_radius=9, reverse=False):
     if not reverse:
         order = [UNKNOWN, OBSTACLE, TEAM1_BG, TEAM2_BG, TEAM1_AG, TEAM2_AG,
                                   TEAM1_UAV, TEAM2_UAV, TEAM1_FL, TEAM2_FL, DEAD]
-    else: # reverse mapping
+    else:
         order = [UNKNOWN, OBSTACLE, TEAM2_BG, TEAM1_BG, TEAM2_AG, TEAM1_AG,
                                   TEAM2_UAV, TEAM1_UAV, TEAM2_FL, TEAM1_FL, DEAD]
     map_channel = dict(zip(order, range(num_channel)))
 
-    # Expand the observation with wall to avoid dealing with the boundary
+    # Padding Boundary 
+    #state = np.pad(state, ((vision_radius,vision_radius),(vision_radius,vision_radius)), 'constant', constant_values=OBSTACLE)
     sx, sy = state.shape
     _state = np.full((sx+2*vision_radius, sy+2*vision_radius),OBSTACLE)
     _state[vision_radius:vision_radius+sx, vision_radius:vision_radius+sy] = state
@@ -133,6 +134,11 @@ def one_hot_encoder_v2(state, agents, vision_radius=9, reverse=False):
 
 # Debug
 def debug():
+    """debug
+    Include testing code for above methods and classes.
+    The execution will start witn __main__, and call this method.
+    """
+
     import gym
     import time
     env = gym.make("cap-v0")
