@@ -128,7 +128,6 @@ def one_hot_encoder_v2(state, agents, vision_radius=9, reverse=False):
             each_channel.append(vision==element)
         each_agent.append(np.stack(each_channel, axis=-1))
     oh_state = np.stack(each_agent, axis=0)
-    print(oh_state.shape)
                 
     return oh_state
 

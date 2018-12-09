@@ -110,11 +110,10 @@ class ActorCritic:
             self.c_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/critic')
                 
             # Local Network
-            if scope == 'global':
-                # Optimizer
-                self.critic_optimizer = tf.train.AdamOptimizer(self.lr_critic, name='Adam_critic')
-                self.actor_optimizer = tf.train.AdamOptimizer(self.lr_actor, name='Adam_actor')
-            else:
+            # Optimizer
+            self.critic_optimizer = tf.train.AdamOptimizer(self.lr_critic, name='Adam_critic')
+            self.actor_optimizer = tf.train.AdamOptimizer(self.lr_actor, name='Adam_actor')
+            if scope != 'global':
                 self.action_ = tf.placeholder(shape=[None],dtype=tf.int32, name='action_holder')
                 self.action_OH = tf.one_hot(self.action_, action_size)
                 self.td_target_ = tf.placeholder(shape=[None], dtype=tf.float32, name='td_target_holder')
@@ -152,8 +151,8 @@ class ActorCritic:
 
                         # Push local weights to global weights
                         with tf.name_scope('push'):
-                            update_a_op = global_network.actor_optimizer.apply_gradients(zip(a_grads, global_network.a_vars))
-                            update_c_op = global_network.critic_optimizer.apply_gradients(zip(c_grads, global_network.c_vars))
+                            update_a_op = self.actor_optimizer.apply_gradients(zip(a_grads, global_network.a_vars))
+                            update_c_op = self.critic_optimizer.apply_gradients(zip(c_grads, global_network.c_vars))
                             self.update_ops = tf.group(update_a_op, update_c_op)
 
     def _build_actor_network(self):
@@ -194,15 +193,15 @@ class ActorCritic:
                                                 activation_fn=tf.nn.softmax)
 
     def _build_critic_network(self, in_net=None):
-        in_shape = [None, self.num_agent] + self.in_size[1:]
-        self.critic_state_input = tf.placeholder(shape=in_shape, dtype=tf.float32, name='cr_state')
-        self.mask = tf.placeholder(shape=[None, self.num_agent], dtype=tf.float32, name='mask')
-        n_entry = tf.shape(self.critic_state_input)[0]
-        n_row = tf.shape(self.critic_state_input)[0] * tf.shape(self.critic_state_input)[1]
-        flat_shape = [n_row] + self.in_size[1:]
-        bulk_shape = tf.shape(self.critic_state_input)
+        with tf.name_scope('critic_pipeline'):
+            in_shape = [None, self.num_agent] + self.in_size[1:]
+            self.critic_state_input = tf.placeholder(shape=in_shape, dtype=tf.float32, name='cr_state')
+            n_entry = tf.shape(self.critic_state_input)[0]
+            n_row = tf.shape(self.critic_state_input)[0] * tf.shape(self.critic_state_input)[1]
+            flat_shape = [n_row] + self.in_size[1:]
+            bulk_shape = tf.shape(self.critic_state_input)
 
-        net = tf.reshape(self.critic_state_input, flat_shape)
+            net = tf.reshape(self.critic_state_input, flat_shape)
         with tf.variable_scope('actor', reuse=tf.AUTO_REUSE):
             net = layers.conv2d(net, 32, [5,5],
                                 activation_fn=tf.nn.relu,
@@ -232,11 +231,12 @@ class ActorCritic:
             net = tf.stop_gradient(net)
         
         with tf.variable_scope('critic'):
+            self.mask = tf.placeholder(shape=[None, self.num_agent], dtype=tf.float32, name='mask')
             net = layers.fully_connected(net, 1,
                                          weights_initializer=layers.xavier_initializer(),
                                          biases_initializer=tf.zeros_initializer(),
                                          activation_fn=None)
-            net = tf.reshape(net, [n_entry, self.num_agent])
+            net = tf.reshape(net, [-1, self.num_agent])
 
             reweight = tf.get_variable(name='critic_reweight',
                                        shape=[self.num_agent],
