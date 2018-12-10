@@ -30,8 +30,8 @@ class DQN:
                  in_size,
                  action_size,
                  scope,
-                 trainer,
                  num_agent,
+                 trainer=None,
                  tau=0.001,
                  gamma=0.99,
                  grad_clip_norm=0,
@@ -77,13 +77,11 @@ class DQN:
         self.gamma = gamma
         
         with tf.variable_scope(scope), tf.device('/gpu:0'):
-            self.local_step = tf.Variable(initial_step, trainable=False, name='local_step')
-
             self._build_Q_network()
+            self.graph_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope)
             if scope != 'target':
                 self._build_training()
                 self._build_pipeline()
-            self.graph_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope)
                             
     def _build_Q_network(self):
         """_build_Q_network
@@ -92,7 +90,7 @@ class DQN:
 
         Series of reshape is require to evaluate the action for each agent.
         """
-        in_size = [-1, self.num_agent] + self.in_size[1:]
+        in_size = [None, self.num_agent] + self.in_size[1:]
         self.state_input_ = tf.placeholder(shape=in_size,dtype=tf.float32, name='state')
         with tf.name_scope('input_pipeline'):
             n_entry = tf.shape(self.state_input_)[0]
@@ -158,13 +156,18 @@ class DQN:
 
         :param state:
         """
-        return self.sess.run(self.predict, feed_dict={self.state_input_:state)
+        return self.sess.run(self.predict, feed_dict={self.state_input_:state}).tolist()
 
-    def update_model(self, states0, actions, rewards, states1, dones, masks):
+    def update_full(self, states0, actions, rewards, states1, dones, masks):
+        n_entry = len(states0)
         q1 = self.sess.run(self.predict, feed_dict={self.state_input_:states1})
         q2 = self.sess.run(self.target_network.Qout, feed_dict={self.target_network.state_input_:states1})
         end_masks = -(dones-1)
-        dq = q2[:,q1]
+        dq = np.zeros_like(q1)
+        for idx in range(self.num_agent):
+            dq[:,idx] = q2[range(n_entry),idx,q1[:,idx]]
+        
+        dq = np.sum(dq, axis=1)
         targetQ = rewards + (self.gamma * dq * end_masks)
 
         feed_dict = {self.state_input_ : states0,
