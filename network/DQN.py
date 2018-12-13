@@ -117,8 +117,8 @@ class DQN:
         # Separate value/advantage stream
         adv_net, value_net = tf.split(net, 2, 3)
         adv_net, value_net = layers.flatten(adv_net), layers.flatten(value_net)
-        adv_net = layers.fully_connected(adv_net, self.action_size)
-        value_net = layers.fully_connected(value_net, 1)
+        adv_net = layers.fully_connected(adv_net, self.action_size, activation_fn=None)
+        value_net = layers.fully_connected(value_net, 1, activation_fn=None)
         with tf.name_scope('concat'):
             net = value_net + tf.subtract(adv_net, tf.reduce_mean(adv_net, axis=1, keepdims=True))
         with tf.name_scope('rebuild'):
@@ -137,10 +137,10 @@ class DQN:
         with tf.name_scope('Q'):
             oh_action = tf.one_hot(self.action_, self.action_size, dtype=tf.float32) # [?, num_agent, action_size]
             self.Q_ind = tf.reduce_sum(tf.multiply(self.Qout, oh_action), axis=-1) # [?, num_agent]
-            self.Q_sum = tf.reduce_sum(self.Q_ind, axis=-1)
+            self.Q_sum = tf.reduce_sum(self.Q_ind*self.mask_, axis=-1)
         
         with tf.name_scope('Q_train'):
-            self.td_error = tf.square(self.targetQ_ - self.Q_sum)
+            self.td_error = tf.square(self.targetQ_-self.Q_sum)
             self.loss = tf.reduce_mean(self.td_error)
             self.grads = tf.gradients(self.loss, self.graph_vars)
 
@@ -167,7 +167,7 @@ class DQN:
         for idx in range(self.num_agent):
             dq[:,idx] = q2[range(n_entry),idx,q1[:,idx]]
         
-        dq = np.sum(dq, axis=1)
+        dq = np.sum(dq*masks, axis=1)
         targetQ = rewards + (self.gamma * dq * end_masks)
 
         feed_dict = {self.state_input_ : states0,
