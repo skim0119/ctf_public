@@ -96,7 +96,8 @@ class CreateMap:
             Value assigned to the random location of the map
         """
         dimx, dimy = new_map.shape
-        while True:
+        for _ in range(10000):
+        #while True:
             lx = np.random.randint(0, dimx)
             ly = np.random.randint(0, dimy)
             if new_map[lx,ly] == code_where:
