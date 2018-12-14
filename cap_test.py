@@ -18,9 +18,18 @@ t = 0
 total_score = 0
 
 # reset the environment and select the policies for each of the team
-#policy_red  = policy.policy_RL.PolicyGen(env.get_map, env.get_team_red, model_dir='model/B4R4_self_VANILLA/',color='red')
-policy_red  = policy.random.PolicyGen(env.get_map, env.get_team_red)
-policy_blue = policy.policy_RL.PolicyGen(env.get_map, env.get_team_blue, model_dir='model/B4R4_self_VANILLA/')
+policy_red  = policy.zeros.PolicyGen(env.get_map, env.get_team_red)
+#policy_red = policy.policy_RL.PolicyGen(env.get_map, env.get_team_red,
+#                                         model_dir='model_pretrain/A3C_CVT/',
+#                                         input_name='global/actor/state:0',
+#                                         output_name='global/actor/fully_connected/Softmax:0',
+#                                         color='red'
+#                                         )
+policy_blue = policy.policy_RL.PolicyGen(env.get_map, env.get_team_blue,
+                                         model_dir='model_pretrain/A3C_CVT/',
+                                         input_name='global/actor/state:0',
+                                         output_name='global/actor/fully_connected/Softmax:0'
+                                         )
 observation = env.reset(map_size=20,
                         policy_blue=policy_blue,
                         policy_red=policy_red)
