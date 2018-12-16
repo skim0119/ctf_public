@@ -243,7 +243,7 @@ class ActorCritic:
                     lstm_cell = tf.nn.rnn_cell.LSTMCell(rnn_steps)
                     self.rnn_state_ = tf.placeholder(tf.float32, [rnn_layers, 2, 1, rnn_steps])
                     self.rnn_state_init = np.zeros((rnn_layers, 2, 1, rnn_steps), np.float32)
-                    rnn_state_input = tf.contrib.rnn.LSTMStateTuple(*tf.unstack(self.rnn_state_,axis=0))
+                    rnn_state_input = tf.contrib.rnn.LSTMStateTuple(*tf.unstack(self.rnn_state_,axis=1))
                     #lstm_cell = tf.nn.rnn_cell.MultiRNNCell([lstm_cell] * rnn_layers)
                     sequence_length = tf.shape(self.imageIn)[0] #[:1]
                     rnn_output, self.rnn_state = tf.nn.dynamic_rnn(cell=lstm_cell,
