@@ -241,15 +241,16 @@ class ActorCritic:
                     #rnn_out = tf.reshape(lstm_outputs, [-1, 256])
 #------------------------------------------------------------------------------------------------------------------------
                     lstm_cell = tf.nn.rnn_cell.LSTMCell(rnn_steps)
-                    self.rnn_state_ = tf.placeholder(tf.float32, [rnn_layers, 2, 1, rnn_steps])
-                    self.rnn_state_init = np.zeros((rnn_layers, 2, 1, rnn_steps), np.float32)
-                    rnn_state_input = tf.contrib.rnn.LSTMStateTuple(*tf.unstack(self.rnn_state_,axis=1))
+                    self.rnn_state_ = tf.placeholder(tf.float32, [2, 1, rnn_steps])
+                    self.rnn_state_init = np.zeros((2, 1, rnn_steps), np.float32)
+                    rnn_state_input = tf.contrib.rnn.LSTMStateTuple(*tf.unstack(self.rnn_state_,axis=0))
                     #lstm_cell = tf.nn.rnn_cell.MultiRNNCell([lstm_cell] * rnn_layers)
                     sequence_length = tf.shape(self.state_input)[:1]
                     rnn_output, self.rnn_state = tf.nn.dynamic_rnn(cell=lstm_cell,
-                                                                   inputs=tf.expand_dims(net,axis=0),
+                                                                   inputs=tf.expand_dims(net,[0]),
                                                                    sequence_length=sequence_length,
-                                                                   initial_state=rnn_state_input
+                                                                   initial_state=rnn_state_input,
+                                                                   time_major=False
                                                                    )
                     net = tf.reshape(rnn_output, [-1, rnn_steps])
 
@@ -271,7 +272,7 @@ class ActorCritic:
     # Forward Propagation
     def run_network(self, feed_dict):
         if self.lstm_network:
-            a_probs, critic, rnn_state = self.sess.run([self.actor, self.critic, self.current_state], feed_dict)
+            a_probs, critic, rnn_state = self.sess.run([self.actor, self.critic, self.rnn_state], feed_dict)
             return [np.random.choice(self.action_size, p=prob/sum(prob)) for prob in a_probs], critic, rnn_state
         else:
             a_probs, critic = self.sess.run([self.actor, self.critic], feed_dict)
