@@ -249,7 +249,7 @@ class ActorCritic:
                     rnn_output, self.rnn_state = tf.nn.dynamic_rnn(cell=lstm_cell,
                                                                    inputs=net,
                                                                    sequence_length=sequence_length,
-                                                                   initial_state=rnn_state_in
+                                                                   initial_state=rnn_state_input
                                                                    )
                     net = tf.reshape(rnn_output, [-1, rnn_steps])
 
