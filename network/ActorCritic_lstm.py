@@ -247,7 +247,7 @@ class ActorCritic:
                     #lstm_cell = tf.nn.rnn_cell.MultiRNNCell([lstm_cell] * rnn_layers)
                     sequence_length = tf.shape(self.state_input)[:1]
                     rnn_output, self.rnn_state = tf.nn.dynamic_rnn(cell=lstm_cell,
-                                                                   inputs=net,
+                                                                   inputs=tf.expand_dims(net,axis=0),
                                                                    sequence_length=sequence_length,
                                                                    initial_state=rnn_state_input
                                                                    )
