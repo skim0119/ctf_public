@@ -48,10 +48,9 @@ class ActorCritic:
                  lr_a_step=0,
                  lr_c_step=0,
                  entropy_beta = 0.001,
-                 critic_beta = 0.5,
+                 critic_beta = 1.0,
                  sess=None,
                  global_network=None,
-                 lstm_network=False,
                  separate_train=False):
         """ Initialize AC network and required parameters
 
@@ -79,11 +78,7 @@ class ActorCritic:
         self.grad_clip_norm = grad_clip_norm
         self.scope = scope
         self.global_step = global_step
-        self.lstm_network = lstm_network
         self.separate_train = separate_train
-        
-        # Dimensions
-        self.lstm_layers = 1
         
         with tf.variable_scope(scope):
             self.local_step = tf.Variable(initial_step, trainable=False, name='local_step')
@@ -141,10 +136,10 @@ class ActorCritic:
 
                         # Actor Loss
                         obj_func = tf.log(tf.reduce_sum(self.actor * self.action_OH, 1))
-                        exp_v = obj_func * self.advantage_ + entropy_beta * self.entropy
-                        self.actor_loss = tf.reduce_mean(-exp_v, name='actor_loss')
+                        exp_v = obj_func * self.advantage_ 
+                        self.actor_loss = tf.reduce_mean(-exp_v, name='actor_loss') - entropy_beta * self.entropy
                         
-                        self.total_loss = critic_beta * self.critic_loss + self.actor_loss
+                        self.total_loss = critic_beta * self.critic_loss + self.actor_loss - entropy_beta * self.entropy
 
                     if self.separate_train:
                         with tf.name_scope('local_grad'):
@@ -208,54 +203,6 @@ class ActorCritic:
             net = layers.flatten(net)
             net = layers.fully_connected(net, 128)
 
-            if self.lstm_network:
-                '''rnn_size = [2, 1, 19, 19, 32]
-                self.rnn_state_ = tf.placeholder(tf.float32, rnn_size)
-                self.rnn_init_state = np.zeros(rnn_size)
-
-                state_per_layer_list = tf.split(net, 6, 3) # creates a list of leghth time_steps and one elemnt has the shape of (?, 400, 400, 1, 10)
-                state_per_layer_list = [net_ for net_ in state_per_layer_list] #remove the third dimention now one list elemnt has the shape of (?, 400, 400, 10)
-
-                cell = tf.contrib.rnn.ConvLSTMCell(conv_ndims=2, # ConvLSTMCell definition
-                                                   input_shape=[19, 19, 6],
-                                                   output_channels=32,
-                                                   kernel_shape=[2, 2],
-                                                   skip_connection=False)
-
-                state = cell.zero_state(1, dtype=tf.float32) #initial state is zero
-
-                with tf.variable_scope("ConvLSTM") as scope:  # as BasicLSTMCell # create the RNN with a loop
-                    for i, net_ in enumerate(state_per_layer_list):
-                        if i > 0:
-                            scope.reuse_variables()
-                        # ConvCell takes Tensor with size [1, 19, 19, 32].
-                        states_series, self.current_state = cell(net_,state)
-                net = layers.flatten(states_series[-1])'''
-
-                rnn_steps = 16
-                self.rnn_state_ = tf.placeholder(tf.float32, [self.lstm_layers, 1, rnn_steps])
-                self.rnn_init_state = np.zeros((self.lstm_layers, 1, rnn_steps))
-                #self.rnn_state_ = tf.placeholder(tf.float32, [self.lstm_layers, 2, 1, rnn_steps])
-                #self.rnn_init_state = np.zeros((self.lstm_layers, 2, 1, rnn_steps))
-
-                state_per_layer_list = tf.unstack(self.rnn_state_, axis=0)
-                rnn_tuple_state = tuple([holder_ for holder_ in state_per_layer_list])
-                #rnn_tuple_state = tuple(
-                #    [tf.nn.rnn_cell.LSTMStateTuple(state_per_layer_list[idx][0], state_per_layer_list[idx][1])
-                #     for idx in range(self.lstm_layers)]
-                #)
-
-                cell = tf.nn.rnn_cell.GRUCell(rnn_steps, name='gru_cell')
-                #cell = tf.nn.rnn_cell.LSTMCell(rnn_steps, forget_bias=1, name='lstm_cell')
-                cell = tf.nn.rnn_cell.MultiRNNCell([cell] * self.lstm_layers)
-                states_series, self.current_state = tf.nn.dynamic_rnn(cell,
-                                                                      tf.expand_dims(net, [0]),
-                                                                      initial_state=rnn_tuple_state,
-                                                                      sequence_length=tf.shape(self.state_input)[:1]
-                                                                      )
-                net = tf.reshape(states_series[-1], [-1, rnn_steps])
-                
-                
             self.actor = layers.fully_connected(net,
                                                 self.action_size,
                                                 weights_initializer=layers.xavier_initializer(),
@@ -274,12 +221,8 @@ class ActorCritic:
 
     # Choose Action
     def run_network(self, feed_dict):
-        if self.lstm_network:
-            a_probs, critic, rnn_state = self.sess.run([self.actor, self.critic, self.current_state], feed_dict)
-            return [np.random.choice(self.action_size, p=prob/sum(prob)) for prob in a_probs], critic, rnn_state
-        else:
-            a_probs, critic = self.sess.run([self.actor, self.critic], feed_dict)
-            return [np.random.choice(self.action_size, p=prob/sum(prob)) for prob in a_probs], critic, None  
+        a_probs, critic = self.sess.run([self.actor, self.critic], feed_dict)
+        return [np.random.choice(self.action_size, p=prob/sum(prob)) for prob in a_probs], critic, None  
 
     def update_global(self, feed_dict):
         self.sess.run(self.update_ops, feed_dict)
