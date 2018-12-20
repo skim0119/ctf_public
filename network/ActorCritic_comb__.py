@@ -75,7 +75,7 @@ class ActorCritic:
                  sess=None,
                  global_network=None,
                  asynch_training=True,
-                 centralize_critic=False):
+                 centralize_critic=True):
         """ Initialize AC network and required parameters
 
         Keyword arguments:
@@ -127,56 +127,9 @@ class ActorCritic:
             # global Network
             # Build actor and critic network weights. (global network does not need training sequence)
             self.a_vars, self.c_vars = self._build_AC_network()
-
             if scope != 'global':
                 self._build_backpropagation()
                
-            # Local Network
-            # Optimizer
-            self.critic_optimizer = tf.train.AdamOptimizer(self.lr_critic, name='Adam_critic')
-            self.actor_optimizer = tf.train.AdamOptimizer(self.lr_actor, name='Adam_actor')
-            if scope != 'global':
-                self.action_ = tf.placeholder(shape=[None],dtype=tf.int32, name='action_holder')
-                self.action_OH = tf.one_hot(self.action_, action_size)
-                self.td_target_ = tf.placeholder(shape=[None], dtype=tf.float32, name='td_target_holder')
-                self.advantage_ = tf.placeholder(shape=[None], dtype=tf.float32, name='adv_holder')
-
-                with tf.device('/gpu:0'):
-                    with tf.name_scope('train'):
-                        # Critic (value) Loss
-                        td_error = self.td_target_ - self.critic 
-                        self.entropy = -tf.reduce_mean(self.actor * tf.log(self.actor), name='entropy')
-                        self.critic_loss = tf.reduce_mean(tf.square(td_error),
-                                                          name='critic_loss')
-
-                        # Actor Loss
-                        obj_func = tf.log(tf.reduce_sum(self.actor * self.action_OH, 1))
-                        exp_v = obj_func * self.advantage_ + entropy_beta * self.entropy
-                        self.actor_loss = tf.reduce_mean(-exp_v, name='actor_loss')
-                        
-                        self.total_loss = critic_beta * self.critic_loss + self.actor_loss
-
-                    with tf.name_scope('local_grad'):
-                        a_grads = tf.gradients(self.actor_loss, self.a_vars)
-                        c_grads = tf.gradients(self.critic_loss, self.c_vars)
-                        if self.grad_clip_norm:
-                            a_grads = [(tf.clip_by_norm(grad, self.grad_clip_norm), var) for grad, var in a_grads if not grad is None]
-                            c_grads = [(tf.clip_by_norm(grad, self.grad_clip_norm), var) for grad, var in c_grads if not grad is None]
-
-                    # Sync with Global Network
-                    with tf.name_scope('sync'):
-                        # Pull global weights to local weights
-                        with tf.name_scope('pull'):
-                            pull_a_vars_op = [local_var.assign(glob_var) for local_var, glob_var in zip(self.a_vars, global_network.a_vars)]
-                            pull_c_vars_op = [local_var.assign(glob_var) for local_var, glob_var in zip(self.c_vars, global_network.c_vars)]
-                            self.pull_op = tf.group(pull_a_vars_op, pull_c_vars_op)
-
-                        # Push local weights to global weights
-                        with tf.name_scope('push'):
-                            update_a_op = self.actor_optimizer.apply_gradients(zip(a_grads, global_network.a_vars))
-                            update_c_op = self.critic_optimizer.apply_gradients(zip(c_grads, global_network.c_vars))
-                            self.update_ops = tf.group(update_a_op, update_c_op)
-
     def _build_AC_network(self):
         input_shape = [None] + self.in_size
         with tf.variable_scope('actor'):
@@ -188,19 +141,19 @@ class ActorCritic:
             net = self.state_input
             net = layers.conv3d(inputs=net,
                                 filters=32,
-                                kernel_size=[1,5,5]
+                                kernel_size=[1,5,5],
                                 weights_initializer=layers.xavier_initializer(),
                                 biases_initializer=tf.zeros_initializer(),
                                 padding='SAME')
             net = layers.conv3d(inputs=net,
                                 filters=64,
-                                kernel_size=[1,3,3]
+                                kernel_size=[1,3,3],
                                 weights_initializer=layers.xavier_initializer(),
                                 biases_initializer=tf.zeros_initializer(),
                                 padding='SAME')
             net = layers.conv3d(inputs=net,
                                 filters=64,
-                                kernel_size=[1,2,2]
+                                kernel_size=[1,2,2],
                                 weights_initializer=layers.xavier_initializer(),
                                 biases_initializer=tf.zeros_initializer(),
                                 padding='SAME')
@@ -228,19 +181,19 @@ class ActorCritic:
                     reweight = tf.get_variable(name='critic_reweight',
                                                shape=[self.num_agent],
                                                dtype=tf.float32,
-                                               initializer=tf.constant_initializer(value=1.0/self.num_agent)
+                                               initializer=layers.xavier_initializer()
                                                )
-                    #shift = tf.get_variable(name='critic_shift',
-                    #                           shape=[1],
-                    #                           dtype=tf.float32,
-                    #                           initializer=tf.zeros_initializer
-                    #                           )
+                    shift = tf.get_variable(name='critic_shift',
+                                               shape=[1],
+                                               dtype=tf.float32,
+                                               initializer=tf.zeros_initializer
+                                               )
                     net = tf.multiply(net, reweight) # + shift
                 self.critic = tf.reduce_sum(tf.multiply(net, self.mask_), axis=1) # [?, 1]
             else:
                 net_critic = tf.stop_gradient(serial)
                 net_critic = layers.fully_connected(net_critic, 1,
-                                                    weights_initializer=layers.xavier_initializer(),
+                                                    weights_initializer=tf.truncated_normal_initializer(),
                                                     biases_initializer=tf.zeros_initializer(),
                                                     activation_fn=None)
                 self.critic = tf.reshape(net_critic, [-1, self.num_agent])
@@ -254,7 +207,7 @@ class ActorCritic:
     def _build_backpropagation(self):
         with tf.device('/gpu:0'):
             with tf.name_scope('antropy'):
-                entropy_frame = -tf.reduce_mean(self.actor * tf.log(self.actor), axis=-1) name='entropy')
+                entropy_frame = -tf.reduce_mean(self.actor * tf.log(self.actor), axis=-1), name='entropy')
                 self.entropy = tf.reduce_mean(entropy_frame, name='entropy')
 
             with tf.name_scope('critic_train'):
