@@ -193,15 +193,15 @@ class ActorCritic:
             self.actor = tf.reshape(net_actor, [-1, self.num_agent, self.action_size])
 
         with tf.variable_scope('critic'):
-            self.mask_ = tf.placeholder(shape=[None, self.num_agent], dtype=tf.float32, name='mask')
-            net_critic = tf.stop_gradient(serial)
-            net_critic = layers.fully_connected(net_critic, 1,
-                                                weights_initializer=layers.xavier_initializer(),
-                                                biases_initializer=tf.zeros_initializer(),
-                                                activation_fn=None)
-            net_critic = tf.reshape(net_critic, [-1, self.num_agent])
-
             if self.centralize_critic:
+                self.mask_ = tf.placeholder(shape=[None, self.num_agent], dtype=tf.float32, name='mask')
+                net_critic = tf.stop_gradient(serial)
+                net_critic = layers.fully_connected(net_critic, 1,
+                                                    weights_initializer=layers.xavier_initializer(),
+                                                    biases_initializer=tf.zeros_initializer(),
+                                                    activation_fn=None)
+                net_critic = tf.reshape(net_critic, [-1, self.num_agent])
+
                 with tf.name_scope('critic_weight'):
                     reweight = tf.get_variable(name='critic_reweight',
                                                shape=[self.num_agent],
@@ -214,9 +214,14 @@ class ActorCritic:
                     #                           initializer=tf.zeros_initializer
                     #                           )
                     net = tf.multiply(net, reweight) # + shift
-                    self.critic = tf.reduce_sum(tf.multiply(net, self.mask_), axis=1) # [?, 1]
+                self.critic = tf.reduce_sum(tf.multiply(net, self.mask_), axis=1) # [?, 1]
             else:
-                self.critic = tf.multiply(net_critic, self.mask_) # [?, num_agent]
+                net_critic = tf.stop_gradient(serial)
+                net_critic = layers.fully_connected(net_critic, 1,
+                                                    weights_initializer=layers.xavier_initializer(),
+                                                    biases_initializer=tf.zeros_initializer(),
+                                                    activation_fn=None)
+                self.critic = tf.reshape(net_critic, [-1, self.num_agent])
     
         # get the parameters of actor and critic networks
         a_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/actor')
