@@ -204,8 +204,8 @@ class ActorCritic:
                 self.rnn_steps = 256
                 self.lstm_layers = 2
                 rnn_layers = 3
-                if True: # self.lstm_GRU:
-                    self.rnn_state_ = tf.placeholder(tf.float32, [self.lstm_layers, 1, self.rnn_steps])
+                if False: # self.lstm_GRU:
+                    self.rnn_state_in = tf.placeholder(tf.float32, [self.lstm_layers, 1, self.rnn_steps])
                     self.rnn_init_state = np.zeros((self.lstm_layers, 1, self.rnn_steps))
                     state_per_layer_list = tf.unstack(self.rnn_state_, axis=0)
                     rnn_tuple_state = tuple([holder_ for holder_ in state_per_layer_list])
