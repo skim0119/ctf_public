@@ -251,17 +251,18 @@ class ActorCritic:
 #------------------------------------------------------------------------------------------------------------------------
                 lstm_cell = tf.nn.rnn_cell.LSTMCell(rnn_hidden_size1)
                 self.rnn_serial_length = tf.placeholder(tf.int32)
-                self.rnn_state_in = lstm_cell.zero_state(self.rnn_serial_length, tf.float32) # Placeholder
+                self.rnn_batch_size = tf.placeholder(tf.int32, shape=[])
+                self.rnn_state_in = lstm_cell.zero_state(self.rnn_batch_size, tf.float32) # Placeholder
                 #rnn_state_input = tf.contrib.rnn.LSTMStateTuple(*tf.unstack(self.rnn_state_in,axis=0)) # Multicell feature
                 #lstm_cell = tf.nn.rnn_cell.MultiRNNCell([lstm_cell] * rnn_multi_layer)
-                rnn_net = tf.reshape(net, [-1, self.rnn_serial_length, hidden_size1])
+                rnn_net = tf.reshape(net, [self.rnn_batch_size, self.rnn_serial_length, hidden_size1], name='serialize')
                 rnn_net, self.rnn_state = tf.nn.dynamic_rnn(cell=lstm_cell,
-                                                            inputs=rnn_net
+                                                            inputs=rnn_net,
                                                             sequence_length=self.rnn_serial_length,
                                                             initial_state=self.rnn_state_in,
                                                             time_major=False
                                                             )
-                net = tf.reshape(rnn_net, [-1, self.rnn_steps])
+            net = tf.reshape(rnn_net, [-1, rnn_hidden_size1])
 
             self.actor = layers.fully_connected(net,
                                                 self.action_size,
@@ -291,4 +292,5 @@ class ActorCritic:
 
     def pull_global(self):
         self.sess.run(self.pull_op)
+        
 
