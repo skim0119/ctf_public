@@ -10,6 +10,58 @@ from network.base import base
 import utility
 
 class ActorCritic:
+    """ Build the graph for A3C model 
+    
+    It includes minor features that helps to interact with the network
+
+    """
+    
+    def __init__(self, 
+                 in_size,
+                 action_size,
+                 num_agent,
+                 scope,
+                 decay_lr=False,
+                 lr_actor=1e-4,
+                 lr_critic=1e-4,
+                 grad_clip_norm=0,
+                 global_step=None,
+                 initial_step=0,
+                 lr_a_gamma=1,
+                 lr_c_gamma=1,
+                 lr_a_step=0,
+                 lr_c_step=0,
+                 entropy_beta = 0.001,
+                 critic_beta = 0.5,
+                 sess=None,
+                 global_network=None,
+                 asynch_training=True,
+                 centralize_critic=True):
+        """ Configurations 
+
+        :param params:
+        """
+        raise NotImplementedError
+
+    def _create_placeholders(self):
+        """ Step 1: define the placeholders for input and output """
+        raise NotImplementedError
+
+    def _create_embedding(self):
+        """ Step 2: define weights. In word2vec, it's actually the weights that we care
+        about """
+        raise NotImplementedError
+
+    def _create_loss(self):
+        """ Step 3 + 4: define the inference + the loss function """
+        raise NotImplementedError
+
+    def _create_optimizer(self):
+        """ Step 5: define optimizer """
+        raise NotImplementedError
+
+
+class ActorCritic:
     """Actor Critic Network Implementation for A3C (Tensorflow)
 
     This module contains building network and pipelines to sync with global network.
