@@ -51,7 +51,6 @@ class ActorCritic:
                  critic_beta = 0.25,
                  sess=None,
                  global_network=None,
-                 lstm_network=False,
                  separate_train=True,
                  asynch_training=True):
         """ Initialize AC network and required parameters
@@ -80,7 +79,6 @@ class ActorCritic:
         self.grad_clip_norm = grad_clip_norm
         self.scope = scope
         self.global_step = global_step
-        self.lstm_network = lstm_network
         self.separate_train = separate_train
         self.asynch_training=asynch_training
         
@@ -185,6 +183,10 @@ class ActorCritic:
                                 self.update_ops = global_network.optimizer.apply_gradients(zip(grads, global_network.graph_vars))
                             
     def _build_network(self):
+        hidden_size1 = 256
+        rnn_hidden_size1 = 256
+        #rnn_multi_layer = 5
+
         with tf.variable_scope('actor'):
             net = self.state_input
             net = layers.conv2d(net , 32, [3,3],
@@ -192,84 +194,74 @@ class ActorCritic:
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
                                 padding='SAME')
+            net = layers.max_pool2d(net, [2,2])
             net = layers.conv2d(net, 64, [2,2],
                                 activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
                                 padding='SAME')
             net = layers.flatten(net)
-            net = layers.fully_connected(net, 256)
+            net = layers.fully_connected(net, hidden_size1)
 
-            if self.lstm_network:
-                self.rnn_steps = 256
-                self.lstm_layers = 2
-                rnn_layers = 3
-                if False: # self.lstm_GRU:
-                    self.rnn_state_in = tf.placeholder(tf.float32, [self.lstm_layers, 1, self.rnn_steps])
-                    self.rnn_init_state = np.zeros((self.lstm_layers, 1, self.rnn_steps))
-                    state_per_layer_list = tf.unstack(self.rnn_state_, axis=0)
-                    rnn_tuple_state = tuple([holder_ for holder_ in state_per_layer_list])
-                    cell = tf.nn.rnn_cell.GRUCell(self.rnn_steps, name='gru_cell')
-                    cell = tf.nn.rnn_cell.MultiRNNCell([cell] * self.lstm_layers)
-                    states_series, self.current_state = tf.nn.dynamic_rnn(cell,
-                                                                          tf.expand_dims(net, [0]),
-                                                                          initial_state=rnn_tuple_state,
-                                                                          sequence_length=tf.shape(self.state_input)[:1]
-                                                                          )
-                    net = tf.reshape(states_series[-1], [-1, self.rnn_steps])
-                else:
-                    # Using basic lstm
-                    #Recurrent network for temporal dependencies (awjuliani) for comparison
-                    #lstm_cell = tf.contrib.rnn.BasicLSTMCell(256)
-                    #c_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.c])
-                    #h_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.h])
-                    #c_init = np.zeros((1, lstm_cell.state_size.c), np.float32)
-                    #h_init = np.zeros((1, lstm_cell.state_size.h), np.float32)
-                    #self.state_init = [c_init, h_init]
-                    #self.state_in = (c_in, h_in)
-                    #rnn_in = tf.expand_dims(hidden, [0])
-                    #step_size = tf.shape(self.imageIn)[:1]
-                    #state_in = tf.contrib.rnn.LSTMStateTuple(c_in, h_in)
-                    #lstm_outputs, lstm_state = tf.nn.dynamic_rnn(
-                    #                                        lstm_cell,
-                    #                                        rnn_in,
-                    #                                        initial_state=state_in,
-                    #                                        sequence_length=step_size,
-                    #                                        time_major=False
-                    #                                        )
-                    #lstm_c, lstm_h = lstm_state
-                    #self.state_out = (lstm_c[:1, :], lstm_h[:1, :])
-                    #rnn_out = tf.reshape(lstm_outputs, [-1, 256])
+            if False: # self.lstm_GRU:
+                self.rnn_state_in = tf.placeholder(tf.float32, [self.lstm_layers, 1, self.rnn_steps])
+                self.rnn_init_state = np.zeros((self.lstm_layers, 1, self.rnn_steps))
+                state_per_layer_list = tf.unstack(self.rnn_state_, axis=0)
+                rnn_tuple_state = tuple([holder_ for holder_ in state_per_layer_list])
+                cell = tf.nn.rnn_cell.GRUCell(self.rnn_steps, name='gru_cell')
+                cell = tf.nn.rnn_cell.MultiRNNCell([cell] * self.lstm_layers)
+                states_series, self.current_state = tf.nn.dynamic_rnn(cell,
+                                                                      tf.expand_dims(net, [0]),
+                                                                      initial_state=rnn_tuple_state,
+                                                                      sequence_length=tf.shape(self.state_input)[:1]
+                                                                      )
+                net = tf.reshape(states_series[-1], [-1, self.rnn_steps])
+            else:
+                #lstm_cell = tf.contrib.rnn.BasicLSTMCell(256)
+                #c_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.c])
+                #h_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.h])
+                #c_init = np.zeros((1, lstm_cell.state_size.c), np.float32)
+                #h_init = np.zeros((1, lstm_cell.state_size.h), np.float32)
+                #self.state_init = [c_init, h_init]
+                #self.state_in = (c_in, h_in)
+                #rnn_in = tf.expand_dims(hidden, [0])
+                #step_size = tf.shape(self.imageIn)[:1]
+                #state_in = tf.contrib.rnn.LSTMStateTuple(c_in, h_in)
+                #lstm_outputs, lstm_state = tf.nn.dynamic_rnn(
+                #                                        lstm_cell,
+                #                                        rnn_in,
+                #                                        initial_state=state_in,
+                #                                        sequence_length=step_size,
+                #                                        time_major=False
+                #                                        )
+                #lstm_c, lstm_h = lstm_state
+                #self.state_out = (lstm_c[:1, :], lstm_h[:1, :])
+                #rnn_out = tf.reshape(lstm_outputs, [-1, 256])
 #------------------------------------------------------------------------------------------------------------------------
-                    #We take the output from the final convolutional layer and send it to a recurrent layer.
-                    #The input must be reshaped into [batch x trace x units] for rnn processing, 
-                    #and then returned to [batch x units] when sent through the upper levles.
-                    #self.trainLength = tf.placeholder(dtype=tf.int32)
-                    #self.batch_size = tf.placeholder(dtype=tf.int32,shape=[])
-                    #self.convFlat = tf.reshape(slim.flatten(self.conv4),[self.batch_size,self.trainLength,h_size])
-                    #self.state_in = rnn_cell.zero_state(self.batch_size, tf.float32)
-                    #self.rnn,self.rnn_state = tf.nn.dynamic_rnn(inputs=self.convFlat,
-                    #                                             cell=rnn_cell,
-                    #                                             dtype=tf.float32,
-                    #                                             initial_state=self.state_in,
-                    #                                             scope=myScope+'_rnn')
-                    #self.rnn = tf.reshape(self.rnn,shape=[-1,h_size])
+                #self.trainLength = tf.placeholder(dtype=tf.int32)
+                #self.batch_size = tf.placeholder(dtype=tf.int32,shape=[])
+                #self.convFlat = tf.reshape(slim.flatten(self.conv4),[self.batch_size,self.trainLength,h_size])
+                #self.state_in = rnn_cell.zero_state(self.batch_size, tf.float32)
+                #self.rnn,self.rnn_state = tf.nn.dynamic_rnn(inputs=self.convFlat,
+                #                                             cell=rnn_cell,
+                #                                             dtype=tf.float32,
+                #                                             initial_state=self.state_in,
+                #                                             scope=myScope+'_rnn')
+                #self.rnn = tf.reshape(self.rnn,shape=[-1,h_size])
 #------------------------------------------------------------------------------------------------------------------------
-                    lstm_cell = tf.nn.rnn_cell.LSTMCell(self.rnn_steps)
-                    self.rnn_train_length = tf.placeholder(tf.int32)
-                    #rnn_state_input = tf.contrib.rnn.LSTMStateTuple(*tf.unstack(self.rnn_state_,axis=0))
-                    self.rnn_state_in = lstm_cell.zero_state(1, tf.float32)
-                    #lstm_cell = tf.nn.rnn_cell.MultiRNNCell([lstm_cell] * rnn_layers)
-                    sequence_length = tf.shape(self.state_input)[:1]
-                    rnn_output, lstm_state = tf.nn.dynamic_rnn(cell=lstm_cell,
-                                                                   inputs=tf.expand_dims(net,axis=0),
-                                                                   sequence_length=sequence_length,
-                                                                   initial_state=self.rnn_state_in,
-                                                                   time_major=False
-                                                                   )
-                    lstm_c, lstm_h = lstm_state
-                    self.rnn_state = (lstm_c[:1, :], lstm_h[:1, :])
-                    net = tf.reshape(rnn_output, [-1, self.rnn_steps])
+                lstm_cell = tf.nn.rnn_cell.LSTMCell(rnn_hidden_size1)
+                self.rnn_serial_length = tf.placeholder(tf.int32)
+                self.rnn_state_in = lstm_cell.zero_state(self.rnn_serial_length, tf.float32) # Placeholder
+                #rnn_state_input = tf.contrib.rnn.LSTMStateTuple(*tf.unstack(self.rnn_state_in,axis=0)) # Multicell feature
+                #lstm_cell = tf.nn.rnn_cell.MultiRNNCell([lstm_cell] * rnn_multi_layer)
+                rnn_net = tf.reshape(net, [-1, self.rnn_serial_length, hidden_size1])
+                rnn_net, self.rnn_state = tf.nn.dynamic_rnn(cell=lstm_cell,
+                                                            inputs=rnn_net
+                                                            sequence_length=self.rnn_serial_length,
+                                                            initial_state=self.rnn_state_in,
+                                                            time_major=False
+                                                            )
+                net = tf.reshape(rnn_net, [-1, self.rnn_steps])
 
             self.actor = layers.fully_connected(net,
                                                 self.action_size,
@@ -288,12 +280,8 @@ class ActorCritic:
     # Update global network with local gradients
     # Forward Propagation
     def run_network(self, feed_dict):
-        if self.lstm_network:
-            a_probs, critic, rnn_state = self.sess.run([self.actor, self.critic, self.rnn_state], feed_dict)
-            return [np.random.choice(self.action_size, p=prob/sum(prob)) for prob in a_probs], critic, rnn_state
-        else:
-            a_probs, critic = self.sess.run([self.actor, self.critic], feed_dict)
-            return [np.random.choice(self.action_size, p=prob/sum(prob)) for prob in a_probs], critic, None  
+        a_probs, critic, rnn_state = self.sess.run([self.actor, self.critic, self.rnn_state], feed_dict)
+        return [np.random.choice(self.action_size, p=prob/sum(prob)) for prob in a_probs], critic, rnn_state
 
     def update_global(self, feed_dict):
         self.sess.run(self.update_ops, feed_dict)
