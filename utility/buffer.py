@@ -83,11 +83,9 @@ class Trajectory_buffer:
             self.indices = []
         
     def __repr__(self):
-        """__repr__"""
         return f'Trajectory Buffer(keys={self.keys},depth={self.depth},length={self.buffer_size}'
 
     def __len__(self):
-        """__len__"""
         return self.buffer_size
 
     def empty(self):
@@ -150,3 +148,7 @@ class Trajectory_buffer:
         else:
             #return np.array([self.buffer.pop(random.randrange(len(self.buffer))) for _ in range(size)])
             return np.reshape(np.array(random.sample(self.buffer,size)),[size,self.experience_shape])
+
+
+if __name__ == '__main__':
+    pass

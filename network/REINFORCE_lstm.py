@@ -58,20 +58,30 @@ class REINFORCE:
         self.input_tag = 'Forward_input/state'
         self.output_tag = 'FC_layers/action'
 
+        ## LSTM Parameters
+        self.gru_unit_size = 128
+        self.gru_num_layers = 1
+
     def _build_placeholders(self):
         """ Define the placeholders for forward and back propagation """
         with tf.name_scope('Forward_input'):
-            self.state_input_ = tf.placeholder(shape=self.in_size,dtype=tf.float32, name='state')
+            self.state_input_ = tf.placeholder(shape=[None] + self.in_size,dtype=tf.float32, name='state')
+            self.rnn_init_states = tuple(tf.placeholder(tf.float32, (None, self.gru_unit_size), name="init_states" + str(i))
+                                            for i in range(self.gru_num_layers))
+            self.seq_len = tf.placeholder(tf.int32, [None,], name="seq_len")
 
         with tf.name_scope('Backward_input'):
-            self.action_ = tf.placeholder(shape=[None],dtype=tf.int32, name='action')
-            self.action_OH = tf.one_hot(self.action_holder, self.action_size)
-            self.reward_ = tf.placeholder(shape=[None],dtype=tf.float32, name='reward')
+            self.action_ = tf.placeholder(shape=[None, None],dtype=tf.int32, name='action')
+            self.reward_ = tf.placeholder(shape=[None, None],dtype=tf.float32, name='reward')
+            self.actions_flatten = tf.reshape(self.action_, (-1,))
+            self.rewards_flatten = tf.reshape(self.reward_, (-1,))
 
     def _build_network(self):
         """ Define network """
         with tf.variable_scope('Conv_layers'):
-            net = layers.conv2d(self.state_input, 16, [5,5],
+            bulk_shape = tf.shape(self.state_input_)[0:2]
+            net = tf.reshape(self.state_input_, [-1]+self.in_size[1:])
+            net = layers.conv2d(net, 16, [5,5],
                                 activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
@@ -89,29 +99,51 @@ class REINFORCE:
                                 biases_initializer=tf.zeros_initializer(),
                                 padding='SAME')
             net = layers.flatten(net)
+            net = tf.reshape(net, bulk_shape + [-1])
+
+        with tf.variable_scope("RNN_layers"):
+            gru_cell = tf.contrib.rnn.GRUCell(self.gru_unit_size)
+            gru_cell = tf.contrib.rnn.MultiRNNCell([gru_cell] * self.gru_num_layers)
+            net, self.final_state = tf.nn.dynamic_rnn(gru_cell,
+                                                      net,
+                                                      initial_state=self.rnn_init_states,
+                                                      sequence_length=self.seq_len)
+            net = tf.reshape(net , [-1, self.gru_unit_size])
 
         with tf.variable_scope('FC_layers'):
             ## Fully Connected Layer
-            net = layers.fully_connected(net, 128,
-                                         activation_fn=tf.nn.relu)
-            self.output = layers.fully_connected(net, self.action_size,
-                                                 activation_fn=tf.nn.softmax,
-                                                 scope='action')
+            self.logit = layers.fully_connected(net, self.action_size,
+                                                 activation_fn=None,
+                                                 scope='logit')
+            self.output = tf.nn.softmax(self.logit, scope='action')
+
 
     def _build_loss(self):
         """ Define loss """
+        with tf.name_scope('Entropy'):
+            
         with tf.name_scope('Loss'):
-            # Update Operations
-            self.entropy = -tf.reduce_mean(self.output * tf.log(self.output+1e-8), name='entropy') # measure action diversity
-            obj_func = tf.log(tf.reduce_sum(self.output * self.action_OH, 1))
-            exp_r = obj_func * self.reward_ + self.entropy_beta * self.entropy
-            self.loss = tf.reduce_mean(-exp_r, name='loss')
+            with tf.name_scope("masker"):
+                num_step = tf.shape(self.state_input_)[1]
+                self.mask = tf.sequence_mask(self.seq_len, num_step)
+                self.mask = tf.reshape(tf.cast(self.mask, tf.float32), (-1,))
+            self.entropy = -tf.reduce_mean(self.output * tf.log(self.output+1e-8) * self.mask, axis=1, name='entropy') # measure action diversity
+            self.loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.logit, labels=self.actions_flatten) * self.mask
+            self.loss = self.loss - self.entropy_beta * self.entropy
 
     def _build_optimizer(self):
+                      self.trainable_variables = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="policy_network")
+                      self.gradients = self.optimizer.compute_gradients(self.loss, var_list=self.trainable_variables)
+                      self.clipped_gradients = [(tf.clip_by_norm(grad, self.max_gradient), var)
+                                                  for grad, var in self.gradients]
+                      self.train_op = self.optimizer.apply_gradients(self.clipped_gradients,
+                                                                     self.global_step)
+
         """ Define optimizer and gradient """
         with tf.name_scope('Trainer'):
             self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
             self.grads = self.optimizer.compute_gradients(self.loss)
+
             if self.grad_clip_norm is not None:
                 self.grads = [tf.clip_by_norm(grad, self.grad_clip_norm) for grad in self.grads]
 
@@ -122,6 +154,10 @@ class REINFORCE:
                 self.update_batch = self.optimizer.apply_gradients(grad_holders) 
             else:
                 self.update_batch = self.optimizer.apply_gradients(self.grads)
+
+            # Debug Parameters
+            self.grad_norm = tf.global_norm([grad for grad, var in self.grads])
+            self.var_norm = tf.global_norm(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES))
 
     def _build_summary(self):
         raise NotImplementedError
@@ -146,12 +182,14 @@ class REINFORCE:
             for var, grad in zip(slim.get_model_variables(), self.grads):
                 tf.summary.histogram(var.op.name+'/grad', grad[0])
 
-    def get_action(self, states, deterministic=False):
-        a_probs = self.sess.run(self.output, feed_dict={self.state_input_ : states})
-        if deterministic:
-            return np.argmax(a_probs, axis=1)
-        else:
-            return [np.random.choice(self.action_size, p=prob/sum(prob)) for prob in a_probs]
+
+    def get_action(self, states, rnn_init_states, seq_len=[1]):
+        # Only single action
+        feed_dict={self.state_input_: states,
+                   self.rnn_init_states: rnn_init_states,
+                   self.seq_len: seq_len})
+        a_probs, final_state = self.sess.run([self.output, self.final_state], feed_dict=feed_dict)
+        return np.random.choice(self.num_actions, p=a_probs[0]), final_state
 
     def gradient_clear(self):
         assert self._gradient_batch
@@ -174,3 +212,7 @@ class REINFORCE:
                      self.rewards_ : rewards,
                      self.actions_ : actions}
         self.sess.run(self.update_batch, feed_dict=feed_dict)
+
+    def get_lstm_init(self):
+        init_state = tuple([np.zeros((1, self.gru_unit_size)) for _ in range(self.gru_num_layers)])
+        return init_state
