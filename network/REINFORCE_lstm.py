@@ -120,8 +120,6 @@ class REINFORCE:
 
     def _build_loss(self):
         """ Define loss """
-        with tf.name_scope('Entropy'):
-            
         with tf.name_scope('Loss'):
             with tf.name_scope("masker"):
                 num_step = tf.shape(self.state_input_)[1]
@@ -132,13 +130,6 @@ class REINFORCE:
             self.loss = self.loss - self.entropy_beta * self.entropy
 
     def _build_optimizer(self):
-                      self.trainable_variables = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="policy_network")
-                      self.gradients = self.optimizer.compute_gradients(self.loss, var_list=self.trainable_variables)
-                      self.clipped_gradients = [(tf.clip_by_norm(grad, self.max_gradient), var)
-                                                  for grad, var in self.gradients]
-                      self.train_op = self.optimizer.apply_gradients(self.clipped_gradients,
-                                                                     self.global_step)
-
         """ Define optimizer and gradient """
         with tf.name_scope('Trainer'):
             self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
@@ -187,7 +178,7 @@ class REINFORCE:
         # Only single action
         feed_dict={self.state_input_: states,
                    self.rnn_init_states: rnn_init_states,
-                   self.seq_len: seq_len})
+                   self.seq_len: seq_len}
         a_probs, final_state = self.sess.run([self.output, self.final_state], feed_dict=feed_dict)
         return np.random.choice(self.num_actions, p=a_probs[0]), final_state
 
