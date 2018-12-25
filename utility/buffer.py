@@ -14,7 +14,7 @@ Classes:
     :Trajectory Buffer: Advanced buffer used to keep the trajectory correlation between samples
         Advanced version of Experience Buffer
         The container in format of multidimension list.
-        Provides method of sampling and shuffling.
+        Provides method of sampling 
 
 Note:
     Use 'from buffer import <class_name>' to use specific method/class
@@ -27,127 +27,151 @@ Todo:
 
 """
 
+class Trajectory:
+    """ Trajectory
 
-class Trajectory_buffer:
-    """Trajectory_buffer
+    Trajectory of [s0, a, r, s1] (or any other MDP tuples)
 
-    Trajectory buffer
-        Each trajectory stores tuples for MDP.
-    Support returning and shuffling features
-    The size of the element is adjustable. (or not hardly defined)
-    Once the trajectory is pushed, althering trajectory would be impossible.
-
-    Try to keep the storage separated for each element: avoid transposing and column-searching
+    Equivalent to : list [[s0 a r s1]_0, [s0 a r s1]_1, [s0 a r s1]_2, ...]
+    Shape of : [None, Depth]
+    Each depth must be unstackable
 
     Key Terms:
         depth : number of element in each point along the trajectory.
             ex) [s0, a, r, s1] has depth 4
-        shuffle : return shuffled trajectory
-        keys : name of each element to keep indices. (in order)
-        buffer_size : maximum size of the buffer. Infinite buffer is not allowed
-        return_size : fixed size to return trajectory.
+
+    Methods:
+        __repr__
+        __len__ : Return the length of the currently stored trajectory
+        is_full : boolean, whether trajectory is full
+        append (list)
+
+    Notes:
+        - Trajectory is only pushed single node at a time.
+
+    """
+    def __init__(self, depth=4, length_max=150):
+        # Configuration
+        self.depth = depth
+        self.length_max = length_max
+
+        # Initialize Components
+        self.length = 0;
+        self.buffer = [[] for _ in range(depth)]
+
+    def __call__(self):
+        return self.buffer
+        
+    def __repr__(self):
+        return f'Trajectory (depth={self.depth},length={self.length_max})'
+
+    def __len__(self):
+        return self.length
+
+    def __getitem__(self, index):
+        return self.buffer[index]
+
+    def is_full(self):
+        return self.length == self.length_max
+
+    def append(self, traj):
+        for i, element in enumerate(traj):
+            self.buffer[i].append(element)
+            if self.length == self.length_max:
+                self.buffer[i] = self.buffer[i][1:-1]
+        self.length = min(self.length+1, self.length_max)
+
+class Trajectory_buffer:
+    """Trajectory_buffer
+
+    Buffer for trajectory storage and sampling
+    Once the trajectory is pushed, althering trajectory would be impossible. (avoid)
+
+    The shape of the buffer must have form [None, None, depth]
+    Each depth must be unstackable, and each unstacked array will have form [None, None]+shape
+
+    Second shape must be consist with others.
 
     Methods:
         __repr__
         __len__ : Return the length of the currently stored number of trajectory
+        is_empty : boolean, whether buffer is empty. (length == 0)
+        is_full : boolean, whether buffer is full
         append (list)
-        extend (list) : append each element in list. (serial append)
+        extend (list)
         flush : empty, reset, return remaining at once
         sample (int) : sample 'return_size' amount of trajectory
 
     Notes:
-        - The defualt dictionary will be used to store informations.
-        - Each columns is assigned with each key, and any 'return' will return in same order.
-        - The shuffling uses random.shuffle() method on separate index=[0,1,2,3,4 ...] array
-        - The class is originally written to use for A3C with LSTM network.
+        - The sampling uses random.shuffle() method on separate index=[0,1,2,3,4 ...] array
+        - The class is originally written to use for A3C with LSTM network. (Save trajectory in series)
     """
 
-    def __init__(self, keys, depth=4, buffer_max=50, shuffle=False):
+    def __init__(self, depth=4, buffer_capacity=256, return_size=8):
         """__init__
 
-        :param keys:
-        :param depth:
-        :param buffer_max:
-        :param shuffle: 
+        :param buffer_capacity: maximum size of the buffer.
+        :param return_size: size to return 
         """
+
         # Configuration
-        self.keys = keys
         self.depth = depth
-        self.buffer_max = buffer_max
+        self.buffer_capacity = buffer_capacity
+        self.return_size = return_size
 
         # Initialize Components
         self.buffer_size = 0;
-        self.buffer = defaultdict(deque)
-        self.shuffle = shuffle
-        if shuffle:
-            self.indices = []
+        self.buffer = [[] for _ in range(self.depth)]
         
+    def __call__(self):
+        return self.buffer
+
     def __repr__(self):
-        return f'Trajectory Buffer(keys={self.keys},depth={self.depth},length={self.buffer_size}'
+        return f'Trajectory Buffer(buffer capacity = {self.buffer_capacity}, return size = {self.return_size})'
 
     def __len__(self):
         return self.buffer_size
 
-    def empty(self):
+    def __getitem__(self, index):
+        return self.buffer[index]
+
+    def __setitem__(self, index, item):
+        self.buffer[index] = item
+
+    def is_empty(self):
         return self.buffer_size == 0
 
-    def append(self, traj, keys=None):
-        """append
+    def is_full(self):
+        return self.buffer_size == self.buffer_capacity
 
-        :param traj: Trajectory
-        :param keys: Keys to each element in order
-        """
-        if keys is None:
-            assert len(traj) == len(self.keys)
-            keys = self.keys
-        else:
-            assert len(traj) == len(keys)
-            assert set(keys) in (self.keys)
+    def append(self, traj):
+        self.buffer.append(traj)
+        self.buffer_size += 1
 
-        for element, key in zip(traj, keys):
-            self.buffer[key].append(element)
-            if self.buffer_size == self.buffer_max:
-                self.buffer[key].popleft()
-        self.buffer_size = min(self.buffer_size+1, self.buffer_max)
+    def extend(self, trajs):
+        self.buffer.extend(trajs)
+        if len(self.buffer) > self.buffer_capacity:
+            self.buffer = self.buffer[-self.buffer_capacity:]
+        self.buffer_size = len(self.buffer)
     
-    def extend(self, trajs, keys):
-        """extend
-
-        :param trajs: list of trajectories
-        :param keys: Keys to each element in order
-        """
-        for traj in trajs:
-            self.append(traj, keys)
-    
-    def flush(self, return_size=None):
-        """flush
-        Return the remaining buffer and reset.
-        If return size is give, only return that amount of random sample
-
-        :param return_size:
-        """
-        raise NotImplementedError
-        batch = np.reshape(np.array(self.buffer), [len(self.buffer),self.experience_shape])
-        self.buffer = []
-        return batch
-    
-    def sample(self, return_size=4, order=False):
+    def sample(self, flush=True):
         """sample
-        return 'return_size' number of randomly pulled trajectory
-        if order is on, pull from right end first.
 
-        :param return_size: Number of trajectory to return
-        :param order:
+        :param flush: True - Emtpy the buffer after sampling
         """
-        raise NotImplementedError
-        if shuffle:
-            random.shuffle(self.buffer)
             
-        if size > len(self.buffer):
-            return np.array(self.buffer)
+        if self.return_size > len(self.buffer):
+            ret = self.buffer
+            self.buffer = []
+            return ret
         else:
-            #return np.array([self.buffer.pop(random.randrange(len(self.buffer))) for _ in range(size)])
-            return np.reshape(np.array(random.sample(self.buffer,size)),[size,self.experience_shape])
+            ret = random.sample(self.buffer, self.return_size)
+            self.buffer = []
+            return ret
+
+
+        self.buffer.clear()
+
 
 
 if __name__ == '__main__':

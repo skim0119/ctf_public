@@ -41,7 +41,7 @@ class REINFORCE:
         self.action_size = action_size
         self.learning_rate = learning_rate
         self.grad_clip_norm = grad_clip_norm
-        self.entropy_beta=entropy_beta
+        self.entropy_beta = entropy_beta
         self.scope = scope
         self.sess = sess
 
