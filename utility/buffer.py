@@ -74,12 +74,18 @@ class Trajectory:
     def is_full(self):
         return self.length == self.length_max
 
-    def append(self, traj):
-        for i, element in enumerate(traj):
+    def append(self, mdp_tup):
+        for i, element in enumerate(mdp_tup):
             self.buffer[i].append(element)
             if self.length == self.length_max:
-                self.buffer[i] = self.buffer[i][1:-1]
+                self.buffer[i] = self.buffer[i][1:]
         self.length = min(self.length+1, self.length_max)
+
+    def trim(self, serial_length):
+        if self.length < serial_length:
+            return None
+
+
 
 class Trajectory_buffer:
     """Trajectory_buffer
