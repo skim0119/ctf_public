@@ -61,6 +61,17 @@ class Trajectory:
 
     def __call__(self):
         return self.buffer
+
+    def __setattr__(self, name, value):
+        if self.__dict__.get(name,False):
+            if name == 'depth' or name == 'length_max' or name == 'length':
+                raise AttributeError('Class does not allow assigning new depth and length')
+            else if name == 'buffer':
+                # if buffer is assigned, change the length accordingly
+                self.buffer = value
+                self.length = len(self.buffer[0])
+        else:
+            raise AttributeError('Class does not allow creating new member')
         
     def __repr__(self):
         return f'Trajectory (depth={self.depth},length={self.length_max})'
@@ -84,8 +95,15 @@ class Trajectory:
     def trim(self, serial_length):
         if self.length < serial_length:
             return None
+        s_, e_ = self.length-serial_length, self.length
+        traj_list = []
+        while s_ >= 0:
+            new_traj = Trajectory(depth=self.depth, length_max=self.length_max)
+            new_buffer = [buf[s_:e_] for buf in self.buffer]
+            new_traj.buffer = new_buffer
+            traj_list.append(new_traj)
 
-
+        return traj_list
 
 class Trajectory_buffer:
     """Trajectory_buffer
@@ -97,6 +115,9 @@ class Trajectory_buffer:
     Each depth must be unstackable, and each unstacked array will have form [None, None]+shape
 
     Second shape must be consist with others.
+
+    Each trajectory is stored in list.
+    At the moment of sampling, the list of individual element is returned in numpy array format.
 
     Methods:
         __repr__
@@ -113,17 +134,16 @@ class Trajectory_buffer:
         - The class is originally written to use for A3C with LSTM network. (Save trajectory in series)
     """
 
-    def __init__(self, depth=4, buffer_capacity=256, return_size=8):
+    def __init__(self, depth=4, capacity=256):
         """__init__
 
-        :param buffer_capacity: maximum size of the buffer.
+        :param capacity: maximum size of the buffer.
         :param return_size: size to return 
         """
 
         # Configuration
         self.depth = depth
-        self.buffer_capacity = buffer_capacity
-        self.return_size = return_size
+        self.capacity = capacity
 
         # Initialize Components
         self.buffer_size = 0;
@@ -133,7 +153,7 @@ class Trajectory_buffer:
         return self.buffer
 
     def __repr__(self):
-        return f'Trajectory Buffer(buffer capacity = {self.buffer_capacity}, return size = {self.return_size})'
+        return f'Trajectory Buffer(buffer capacity = {self.capacity}, return size = {self.return_size})'
 
     def __len__(self):
         return self.buffer_size
@@ -148,7 +168,7 @@ class Trajectory_buffer:
         return self.buffer_size == 0
 
     def is_full(self):
-        return self.buffer_size == self.buffer_capacity
+        return self.buffer_size == self.capacity
 
     def append(self, traj):
         self.buffer.append(traj)
@@ -156,29 +176,28 @@ class Trajectory_buffer:
 
     def extend(self, trajs):
         self.buffer.extend(trajs)
-        if len(self.buffer) > self.buffer_capacity:
-            self.buffer = self.buffer[-self.buffer_capacity:]
+        if len(self.buffer) > self.capacity:
+            self.buffer = self.buffer[-self.capacity:]
         self.buffer_size = len(self.buffer)
     
-    def sample(self, flush=True):
+    def sample(self, size, flush=True):
         """sample
+
+        Return in (None,None)+shape 
 
         :param flush: True - Emtpy the buffer after sampling
         """
+        raise NotImplementedError
             
         if self.return_size > len(self.buffer):
             ret = self.buffer
             self.buffer = []
-            return ret
         else:
             ret = random.sample(self.buffer, self.return_size)
             self.buffer = []
-            return ret
 
-
-        self.buffer.clear()
-
-
+        if flush: self.buffer.clear()
+        return ret
 
 if __name__ == '__main__':
     pass
