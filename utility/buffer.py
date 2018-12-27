@@ -194,16 +194,11 @@ class Trajectory_buffer:
 
         :param flush: True - Emtpy the buffer after sampling
         """
-
         if flush:
-            raise NotImplementedError
+            ret = tuple(self.buffer)
+            self.buffer = [[] for _ in range(self.depth)]
         else:
-            ret = self.buffer
-            self.buffer = []
-            ret = random.sample(self.buffer, self.return_size)
-            self.buffer = []
-
-        if flush: self.buffer.clear()
+            raise NotImplementedError
         return ret
 
 if __name__ == '__main__':
