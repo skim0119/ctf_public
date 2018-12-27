@@ -59,20 +59,6 @@ class Trajectory:
         self.length = 0;
         self.buffer = [[] for _ in range(depth)]
 
-    def __call__(self):
-        return self.buffer
-
-    def __setattr__(self, name, value):
-        if self.__dict__.get(name,False):
-            if name == 'depth' or name == 'length_max' or name == 'length':
-                raise AttributeError('Class does not allow assigning new depth and length')
-            elif name == 'buffer':
-                # if buffer is assigned, change the length accordingly
-                self.buffer = value
-                self.length = len(self.buffer[0])
-        else:
-            raise AttributeError('Class does not allow creating new member')
-
     def __repr__(self):
         return f'Trajectory (depth={self.depth},length={self.length_max})'
 
@@ -81,15 +67,22 @@ class Trajectory:
 
     def __getitem__(self, index):
         return self.buffer[index]
+    
+    def __setitem__(self, key, item):
+        self.buffer[key] = item
 
     def is_full(self):
         return self.length == self.length_max
 
     def append(self, mdp_tup):
-        for i, element in enumerate(mdp_tup):
-            self.buffer[i].append(element)
+        for buf, element in zip(self.buffer, mdp_tup):
+            buf.append(element)
             if self.length == self.length_max:
-                self.buffer[i] = self.buffer[i][1:]
+                buf = buf[1:]
+        #for i, element in enumerate(mdp_tup):
+        #    self.buffer[i].append(element)
+        #    if self.length == self.length_max:
+        #        self.buffer[i] = self.buffer[i][1:]
         self.length = min(self.length+1, self.length_max)
 
     def trim(self, serial_length):
@@ -101,7 +94,10 @@ class Trajectory:
             new_traj = Trajectory(depth=self.depth, length_max=self.length_max)
             new_buffer = [buf[s_:e_] for buf in self.buffer]
             new_traj.buffer = new_buffer
+            new_traj.length = len(new_traj.buffer)
             traj_list.append(new_traj)
+            s_ -= serial_length
+            e_ -= serial_length
 
         return traj_list
 
