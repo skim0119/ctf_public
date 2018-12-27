@@ -67,7 +67,7 @@ class Trajectory:
 
     def __getitem__(self, index):
         return self.buffer[index]
-    
+
     def __setitem__(self, key, item):
         self.buffer[key] = item
 
@@ -98,7 +98,7 @@ class Trajectory:
             traj_list.append(new_traj)
             s_ -= serial_length
             e_ -= serial_length
-
+        traj_list = list(reverse(traj_list))
         return traj_list
 
 class Trajectory_buffer:
