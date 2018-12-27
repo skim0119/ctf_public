@@ -187,7 +187,7 @@ class Trajectory_buffer:
             self.buffer = self.buffer[-self.capacity:]
             self.buffer_size = len(self.buffer)
 
-    def sample(self, size, flush=True):
+    def sample(self, flush=True):
         """sample
 
         Return in (None,None)+shape
