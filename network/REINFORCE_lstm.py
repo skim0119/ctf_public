@@ -8,7 +8,7 @@ import utility
 
 class REINFORCE:
     """ Build the graph for A3C model 
-    
+
     It includes minor features that helps to interact with the network
 
     Note:
@@ -26,7 +26,7 @@ class REINFORCE:
         include_lstm:
             If true, include lstm network inbetween convolution and fc network.
     """
-    
+
     def __init__(self,
                  in_size,
                  action_size,
@@ -48,12 +48,6 @@ class REINFORCE:
         ## Configurations
         self._gradient_batch = gradient_batch
 
-        #with tf.name_scope('self.scope'):
-        self._build_placeholders()
-        self._build_network()
-        self._build_loss()
-        self._build_optimizer()
-
         ## Input/Output Tag
         self.input_tag = 'Forward_input/state'
         self.output_tag = 'FC_layers/action'
@@ -61,6 +55,13 @@ class REINFORCE:
         ## LSTM Parameters
         self.gru_unit_size = 128
         self.gru_num_layers = 1
+
+        #with tf.name_scope('self.scope'):
+        self._build_placeholders()
+        self._build_network()
+        self._build_loss()
+        self._build_optimizer()
+
 
     def _build_placeholders(self):
         """ Define the placeholders for forward and back propagation """
@@ -140,9 +141,9 @@ class REINFORCE:
 
             if self._gradient_batch:
                 grad_holders = [(tf.Variable(var, trainable=False, dtype=tf.float32, name=var.op.name+'_buffer'), var) for var in tf.trainable_variables()]
-                self.accumulate_gradient = tf.group([tf.assign_add(a[0],b[0]) for a,b in zip(grad_holders, self.grads)]) 
+                self.accumulate_gradient = tf.group([tf.assign_add(a[0],b[0]) for a,b in zip(grad_holders, self.grads)])
                 self.clear_batch = tf.group([tf.assign(a[0],a[0]*0.0) for a in grad_holders])
-                self.update_batch = self.optimizer.apply_gradients(grad_holders) 
+                self.update_batch = self.optimizer.apply_gradients(grad_holders)
             else:
                 self.update_batch = self.optimizer.apply_gradients(self.grads)
 
@@ -155,19 +156,19 @@ class REINFORCE:
         # Summary
         # Histogram output
         with tf.variable_scope('debug_parameters'):
-            tf.summary.histogram('output', self.output)   
+            tf.summary.histogram('output', self.output)
             tf.summary.histogram('action', self.action_holder)
-        
+
         # Graph summary Loss
         with tf.variable_scope('summary'):
             tf.summary.scalar(name='total_loss', tensor=self.loss)
             tf.summary.scalar(name='Entropy', tensor=self.entropy)
-        
+
         with tf.variable_scope('weights_bias'):
             # Histogram weights and bias
             for var in slim.get_model_variables():
                 tf.summary.histogram(var.op.name, var)
-                
+
         with tf.variable_scope('gradients'):
             # Histogram Gradients
             for var, grad in zip(slim.get_model_variables(), self.grads):
