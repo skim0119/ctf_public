@@ -127,8 +127,13 @@ class REINFORCE:
                 num_step = tf.shape(self.state_input_)[1]
                 self.mask = tf.sequence_mask(self.seq_len, num_step)
                 self.mask = tf.reshape(tf.cast(self.mask, tf.float32), (-1,))
-            self.entropy = -tf.reduce_mean(self.output * tf.log(self.output+1e-8) * self.mask, axis=1, name='entropy') # measure action diversity
-            self.loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.logit, labels=self.actions_flatten) * self.mask
+                
+            self.entropy = -tf.reduce_sum(self.output * tf.log(self.output+1e-8), axis=1)
+            self.entropy = tf.multiply(self.entropy, self.mask)
+            self.entropy = tf.reduce_mean(self.entropy, name='entropy')
+            
+            self.loss = tf.multiply(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.logit, labels=self.actions_flatten), self.mask)
+            self.loss = tf.reduce_mean(tf.multiply(self.loss, self.rewards_flatten))
             self.loss = self.loss - self.entropy_beta * self.entropy
 
     def _build_optimizer(self):
@@ -200,10 +205,10 @@ class REINFORCE:
     #    self.sess.run(self.update_batch)
 
     def update_network(self, states, rewards, actions, rnn_init_states, seq_len):
-        feed_dict = {self.state_input_ : states,
+        feed_dict = {self.state_input_ : np.stack(states),
                      self.reward_ : rewards,
                      self.action_ : actions,
-                     self.rnn_init_states[0]: rnn_init_states,
+                     self.rnn_init_states[0]: np.stack(rnn_init_states),
                      self.seq_len: seq_len}
         self.sess.run(self.update_batch, feed_dict=feed_dict)
 
