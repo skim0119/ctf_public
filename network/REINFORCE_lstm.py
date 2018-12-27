@@ -71,7 +71,7 @@ class REINFORCE:
             self.state_input_ = tf.placeholder(shape=[None] + self.in_size,dtype=tf.float32, name='state')
             self.rnn_init_states = tuple(tf.placeholder(tf.float32, (None, self.gru_unit_size), name="init_states" + str(i))
                                             for i in range(self.gru_num_layers))
-            self.seq_len = tf.placeholder(tf.int32, [None,], name="seq_len")
+            self.seq_len = tf.placeholder(tf.int32, (None,), name="seq_len")
 
         with tf.name_scope('Backward_input'):
             self.action_ = tf.placeholder(shape=[None, None],dtype=tf.int32, name='action')
@@ -185,26 +185,27 @@ class REINFORCE:
         a_probs, final_state = self.sess.run([self.output, self.final_state], feed_dict=feed_dict)
         return np.random.choice(self.num_actions, p=a_probs[0]), final_state
 
-    def gradient_clear(self):
-        assert self._gradient_batch
-        self.sess.run(self.clear_batch)
+    #def gradient_clear(self):
+    #    assert self._gradient_batch
+    #    self.sess.run(self.clear_batch)
 
-    def gradient_accumulate(self, states, rewards, actions):
-        assert self._gradient_batch
+    #def gradient_accumulate(self, states, rewards, actions):
+    #    assert self._gradient_batch
+    #    feed_dict = {self.state_input_ : states,
+    #                 self.rewards_ : rewards,
+    #                 self.actions_ : actions}
+    #    self.sess.run(self.accumulate_gradient, feed_dict=feed_dict)
+
+    #def update_network_batch(self):
+    #    assert self._gradient_batch
+    #    self.sess.run(self.update_batch)
+
+    def update_network(self, states, rewards, actions, rnn_init_states, seq_len):
         feed_dict = {self.state_input_ : states,
                      self.rewards_ : rewards,
-                     self.actions_ : actions}
-        self.sess.run(self.accumulate_gradient, feed_dict=feed_dict)
-
-    def update_network_batch(self):
-        assert self._gradient_batch
-        self.sess.run(self.update_batch)
-
-    def update_network(self, states, rewards, actions):
-        assert not self._gradient_batch
-        feed_dict = {self.state_input_ : states,
-                     self.rewards_ : rewards,
-                     self.actions_ : actions}
+                     self.actions_ : actions,
+                     self.rnn_init_states: rnn_init_states,
+                     self.seq_len: seq_len}
         self.sess.run(self.update_batch, feed_dict=feed_dict)
 
     def get_lstm_init(self):
