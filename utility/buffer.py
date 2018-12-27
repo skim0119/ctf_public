@@ -195,8 +195,9 @@ class Trajectory_buffer:
         :param flush: True - Emtpy the buffer after sampling
         """
         if flush:
-            ret = tuple(self.buffer)
+            ret = tuple(np.b for b in self.buffer)
             self.buffer = [[] for _ in range(self.depth)]
+
         else:
             raise NotImplementedError
         return ret
