@@ -7,7 +7,7 @@ import random
 import utility
 
 class REINFORCE:
-    """ Build the graph for A3C model 
+    """ Build the graph for A3C model
 
     It includes minor features that helps to interact with the network
 
@@ -47,6 +47,8 @@ class REINFORCE:
 
         ## Configurations
         self._gradient_batch = gradient_batch
+        if self._gradient_batch:
+            raise NotImplementedError
 
         ## Input/Output Tag
         self.input_tag = 'Forward_input/state'
@@ -196,7 +198,7 @@ class REINFORCE:
 
     def update_network_batch(self):
         assert self._gradient_batch
-        self.sess.run(self.update_bath)
+        self.sess.run(self.update_batch)
 
     def update_network(self, states, rewards, actions):
         assert not self._gradient_batch
