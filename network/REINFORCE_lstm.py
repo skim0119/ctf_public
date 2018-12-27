@@ -37,7 +37,7 @@ class REINFORCE:
                  sess=None,
                  gradient_batch=False,
                  ):
-        self.in_size = in_size
+        self.in_size = [None]+in_size
         self.action_size = action_size
         self.learning_rate = learning_rate
         self.grad_clip_norm = grad_clip_norm
@@ -68,8 +68,8 @@ class REINFORCE:
     def _build_placeholders(self):
         """ Define the placeholders for forward and back propagation """
         with tf.name_scope('Forward_input'):
-            self.state_input_ = tf.placeholder(shape=[None] + self.in_size,dtype=tf.float32, name='state')
-            self.rnn_init_states = tuple(tf.placeholder(tf.float32, (None, self.gru_unit_size), name="init_states" + str(i))
+            self.state_input_ = tf.placeholder(shape=self.in_size,dtype=tf.float32, name='state')
+            self.rnn_init_states = tuple(tf.placeholder(tf.float32, (None, self.gru_unit_size), name="rnn_init_states" + str(i))
                                             for i in range(self.gru_num_layers))
             self.seq_len = tf.placeholder(tf.int32, (None,), name="seq_len")
 
@@ -82,8 +82,8 @@ class REINFORCE:
     def _build_network(self):
         """ Define network """
         with tf.variable_scope('Conv_layers'):
-            bulk_shape = tf.shape(self.state_input_)[0:2]
-            net = tf.reshape(self.state_input_, [-1]+self.in_size[1:])
+            bulk_shape = tf.concat([tf.shape(self.state_input_)[0:2], -1])
+            net = tf.reshape(self.state_input_, [-1]+self.in_size[2:])
             net = layers.conv2d(net, 16, [5,5],
                                 activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
@@ -102,7 +102,7 @@ class REINFORCE:
                                 biases_initializer=tf.zeros_initializer(),
                                 padding='SAME')
             net = layers.flatten(net)
-            net = tf.reshape(net, bulk_shape + [-1])
+            net = tf.reshape(net, bulk_shape)
 
         with tf.variable_scope("RNN_layers"):
             gru_cell = tf.contrib.rnn.GRUCell(self.gru_unit_size)
