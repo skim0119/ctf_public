@@ -14,7 +14,7 @@ Classes:
     :Trajectory Buffer: Advanced buffer used to keep the trajectory correlation between samples
         Advanced version of Experience Buffer
         The container in format of multidimension list.
-        Provides method of sampling 
+        Provides method of sampling
 
 Note:
     Use 'from buffer import <class_name>' to use specific method/class
@@ -72,7 +72,7 @@ class Trajectory:
                 self.length = len(self.buffer[0])
         else:
             raise AttributeError('Class does not allow creating new member')
-        
+
     def __repr__(self):
         return f'Trajectory (depth={self.depth},length={self.length_max})'
 
@@ -132,13 +132,16 @@ class Trajectory_buffer:
     Notes:
         - The sampling uses random.shuffle() method on separate index=[0,1,2,3,4 ...] array
         - The class is originally written to use for A3C with LSTM network. (Save trajectory in series)
+
+    TODO:
+        - Think about better method of handling 2-D trajectory elements
     """
 
     def __init__(self, depth=4, capacity=256):
         """__init__
 
         :param capacity: maximum size of the buffer.
-        :param return_size: size to return 
+        :param return_size: size to return
         """
 
         # Configuration
@@ -148,7 +151,7 @@ class Trajectory_buffer:
         # Initialize Components
         self.buffer_size = 0;
         self.buffer = [[] for _ in range(self.depth)]
-        
+
     def __call__(self):
         return self.buffer
 
@@ -171,28 +174,32 @@ class Trajectory_buffer:
         return self.buffer_size == self.capacity
 
     def append(self, traj):
-        self.buffer.append(traj)
+        for i, elem in enumerate(traj):
+            self.buffer[i].append(elem)
         self.buffer_size += 1
 
     def extend(self, trajs):
-        self.buffer.extend(trajs)
+        for traj in  trajs:
+            for i, elem in enumerate(traj):
+                self.buffer[i].append(elem)
+        self.buffer_size += len(trajs)
         if len(self.buffer) > self.capacity:
             self.buffer = self.buffer[-self.capacity:]
-        self.buffer_size = len(self.buffer)
-    
+            self.buffer_size = len(self.buffer)
+
     def sample(self, size, flush=True):
         """sample
 
-        Return in (None,None)+shape 
+        Return in (None,None)+shape
 
         :param flush: True - Emtpy the buffer after sampling
         """
-        raise NotImplementedError
-            
-        if self.return_size > len(self.buffer):
+
+        if flush:
+            raise NotImplementedError
+        else:
             ret = self.buffer
             self.buffer = []
-        else:
             ret = random.sample(self.buffer, self.return_size)
             self.buffer = []
 
