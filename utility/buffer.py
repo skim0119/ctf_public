@@ -98,7 +98,11 @@ class Trajectory:
             traj_list.append(new_traj)
             s_ -= serial_length
             e_ -= serial_length
+<<<<<<< HEAD
         traj_list.reverse()
+=======
+        traj_list = list(reverse(traj_list))
+>>>>>>> 92af5719b9302e6eba06fb55ca8725d73900a28e
         return traj_list
 
 class Trajectory_buffer:
