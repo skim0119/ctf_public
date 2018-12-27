@@ -82,7 +82,7 @@ class REINFORCE:
     def _build_network(self):
         """ Define network """
         with tf.variable_scope('Conv_layers'):
-            bulk_shape = tf.concat([tf.shape(self.state_input_)[0:2], -1])
+            bulk_shape = tf.stack([tf.shape(self.state_input_)[0],tf.shape(self.state_input_)[1],128])
             net = tf.reshape(self.state_input_, [-1]+self.in_size[2:])
             net = layers.conv2d(net, 16, [5,5],
                                 activation_fn=tf.nn.relu,
@@ -102,12 +102,13 @@ class REINFORCE:
                                 biases_initializer=tf.zeros_initializer(),
                                 padding='SAME')
             net = layers.flatten(net)
+            net = layers.fully_connected(net, 128, activation_fn=tf.nn.relu)
             net = tf.reshape(net, bulk_shape)
 
         with tf.variable_scope("RNN_layers"):
             gru_cell = tf.contrib.rnn.GRUCell(self.gru_unit_size)
-            gru_cell = tf.contrib.rnn.MultiRNNCell([gru_cell] * self.gru_num_layers)
-            net, self.final_state = tf.nn.dynamic_rnn(gru_cell,
+            gru_cells = tf.contrib.rnn.MultiRNNCell([gru_cell] * self.gru_num_layers)
+            net, self.final_state = tf.nn.dynamic_rnn(gru_cells,
                                                       net,
                                                       initial_state=self.rnn_init_states,
                                                       sequence_length=self.seq_len)
@@ -118,8 +119,7 @@ class REINFORCE:
             self.logit = layers.fully_connected(net, self.action_size,
                                                  activation_fn=None,
                                                  scope='logit')
-            self.output = tf.nn.softmax(self.logit, scope='action')
-
+            self.output = tf.nn.softmax(self.logit, name='action')
 
     def _build_loss(self):
         """ Define loss """
