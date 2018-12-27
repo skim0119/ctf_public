@@ -66,7 +66,7 @@ class Trajectory:
         if self.__dict__.get(name,False):
             if name == 'depth' or name == 'length_max' or name == 'length':
                 raise AttributeError('Class does not allow assigning new depth and length')
-            else if name == 'buffer':
+            elif name == 'buffer':
                 # if buffer is assigned, change the length accordingly
                 self.buffer = value
                 self.length = len(self.buffer[0])
