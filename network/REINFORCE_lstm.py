@@ -64,7 +64,6 @@ class REINFORCE:
         self._build_loss()
         self._build_optimizer()
 
-
     def _build_placeholders(self):
         """ Define the placeholders for forward and back propagation """
         with tf.name_scope('Forward_input'):
@@ -183,7 +182,7 @@ class REINFORCE:
                    self.rnn_init_states: rnn_init_states,
                    self.seq_len: seq_len}
         a_probs, final_state = self.sess.run([self.output, self.final_state], feed_dict=feed_dict)
-        return np.random.choice(self.num_actions, p=a_probs[0]), final_state
+        return np.random.choice(self.action_size, p=a_probs[0]), final_state
 
     #def gradient_clear(self):
     #    assert self._gradient_batch
@@ -202,9 +201,9 @@ class REINFORCE:
 
     def update_network(self, states, rewards, actions, rnn_init_states, seq_len):
         feed_dict = {self.state_input_ : states,
-                     self.rewards_ : rewards,
-                     self.actions_ : actions,
-                     self.rnn_init_states: rnn_init_states,
+                     self.reward_ : rewards,
+                     self.action_ : actions,
+                     self.rnn_init_states[0]: rnn_init_states,
                      self.seq_len: seq_len}
         self.sess.run(self.update_batch, feed_dict=feed_dict)
 
