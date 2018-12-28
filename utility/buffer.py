@@ -3,21 +3,26 @@ import random
 import collections
 from collections import defaultdict, deque
 
-"""Utility module for buffer modules in CtF Project
-
-Please include the docstrings for any method or class to easily reference from Jupyter
-Any pipeline or data manipulation is excluded: they are included in dataModule.py file.
+""" Buffer modules in CtF Project
 
 Classes:
     :Experience_buffer: (in utils.py)
 
+    :Trajectory: buffer Buffer to store the single trajectory roll
+        Each trajectory represent the series of MDP tuples for fixed-time
+        It is used to represent the single experience by single num_agent.
+        The storage is in order of push, and it is stored in 2-D list
+        The 'trim' method to divide the trajectory into sub-trajectories.
+
     :Trajectory Buffer: Advanced buffer used to keep the trajectory correlation between samples
-        Advanced version of Experience Buffer
+        Advanced version of Experience Buffer.
         The container in format of multidimension list.
-        Provides method of sampling
+        The sampling returns the column of trajectories in numpy list.
 
 Note:
     Use 'from buffer import <class_name>' to use specific method/class
+    Please include the docstrings for any method or class to easily reference from Jupyter
+    Any pipeline or data manipulation is excluded: they are included in dataModule.py file.
 
 Todo:
     * Finish documenting the module
@@ -193,7 +198,6 @@ class Trajectory_buffer:
         if flush:
             ret = tuple(np.array(b) for b in self.buffer)
             self.buffer = [[] for _ in range(self.depth)]
-
         else:
             raise NotImplementedError
         return ret
