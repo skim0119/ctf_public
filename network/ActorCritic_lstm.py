@@ -10,13 +10,13 @@ from network.base import base
 import utility
 
 class ActorCritic:
-    """ Build the graph for A3C model 
-    
+    """ Build the graph for A3C model
+
     It includes minor features that helps to interact with the network
 
     """
-    
-    def __init__(self, 
+
+    def __init__(self,
                  in_size,
                  action_size,
                  num_agent,
@@ -37,7 +37,7 @@ class ActorCritic:
                  global_network=None,
                  asynch_training=True,
                  centralize_critic=True):
-        """ Configurations 
+        """ Configurations
 
         :param params:
         """
@@ -71,7 +71,7 @@ class ActorCritic:
 
     Attributes:
         @ Private
-        _build_network : 
+        _build_network :
 
         @ Public
         run_network :
@@ -119,7 +119,7 @@ class ActorCritic:
         TODO:
             * Separate the building trainsequence to separete method.
             * Organize the code with pep8 formating
-            
+
         """
 
         # Class Environment
@@ -133,7 +133,7 @@ class ActorCritic:
         self.global_step = global_step
         self.separate_train = separate_train
         self.asynch_training=asynch_training
-        
+
         with tf.variable_scope(scope):
             self.local_step = tf.Variable(initial_step, trainable=False, name='local_step')
             # Learning Rate Variables
@@ -162,7 +162,7 @@ class ActorCritic:
                 self.c_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/critic')
             else:
                 self.graph_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope)
-                
+
             # Local Network
             if scope == 'global':
                 if self.separate_train:
@@ -183,7 +183,7 @@ class ActorCritic:
                 with tf.device('/gpu:0'):
                     with tf.name_scope('train'):
                         # Critic (value) Loss
-                        td_error = self.td_target_ - self.critic 
+                        td_error = self.td_target_ - self.critic
                         self.entropy = -tf.reduce_mean(self.actor * tf.log(self.actor), name='entropy')
                         self.critic_loss = tf.reduce_mean(tf.square(td_error), #* self.likelihood_cumprod_),
                                                           name='critic_loss')
@@ -192,7 +192,7 @@ class ActorCritic:
                         obj_func = tf.log(tf.reduce_sum(self.actor * self.action_OH, 1))
                         exp_v = obj_func * self.advantage_ + entropy_beta * self.entropy
                         self.actor_loss = tf.reduce_mean(-exp_v, name='actor_loss')
-                        
+
                         self.total_loss = critic_beta * self.critic_loss + self.actor_loss
 
                     if self.separate_train:
@@ -216,7 +216,7 @@ class ActorCritic:
                                 update_a_op = global_network.actor_optimizer.apply_gradients(zip(a_grads, global_network.a_vars))
                                 update_c_op = global_network.critic_optimizer.apply_gradients(zip(c_grads, global_network.c_vars))
                                 self.update_ops = tf.group(update_a_op, update_c_op)
-                            
+
                     else:
                         with tf.name_scope('local_grad'):
                             grads = tf.gradients(self.total_loss, self.graph_vars)
@@ -233,7 +233,7 @@ class ActorCritic:
                             # Push local weights to global weights
                             with tf.name_scope('push'):
                                 self.update_ops = global_network.optimizer.apply_gradients(zip(grads, global_network.graph_vars))
-                            
+
     def _build_network(self):
         hidden_size1 = 256
         rnn_hidden_size1 = 256
@@ -339,10 +339,8 @@ class ActorCritic:
     def update_global(self, feed_dict):
         self.sess.run(self.update_ops, feed_dict)
         al, cl, etrpy = self.sess.run([self.actor_loss, self.critic_loss, self.entropy], feed_dict)
-        
+
         return al, cl, etrpy
 
     def pull_global(self):
         self.sess.run(self.pull_op)
-        
-
