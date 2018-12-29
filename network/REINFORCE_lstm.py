@@ -76,6 +76,7 @@ class REINFORCE:
             self.action_ = tf.placeholder(shape=[None, None],dtype=tf.int32, name='action')
             self.reward_ = tf.placeholder(shape=[None, None],dtype=tf.float32, name='reward')
             self.actions_flatten = tf.reshape(self.action_, (-1,))
+            self.actions_flat_OH = tf.one_hot(self.actions_flatten, self.action_size)
             self.rewards_flatten = tf.reshape(self.reward_, (-1,))
 
     def _build_network(self):
