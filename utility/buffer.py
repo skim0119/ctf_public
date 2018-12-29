@@ -32,6 +32,7 @@ Todo:
 
 """
 
+
 class Trajectory:
     """ Trajectory
 
@@ -55,13 +56,14 @@ class Trajectory:
         - Trajectory is only pushed single node at a time.
 
     """
+
     def __init__(self, depth=4, length_max=150):
         # Configuration
         self.depth = depth
         self.length_max = length_max
 
         # Initialize Components
-        self.length = 0;
+        self.length = 0
         self.buffer = [[] for _ in range(depth)]
 
     def __repr__(self):
@@ -84,7 +86,7 @@ class Trajectory:
             buf.append(element)
             if self.length == self.length_max:
                 buf = buf[1:]
-        #for i, element in enumerate(mdp_tup):
+        # for i, element in enumerate(mdp_tup):
         #    self.buffer[i].append(element)
         #    if self.length == self.length_max:
         #        self.buffer[i] = self.buffer[i][1:]
@@ -105,6 +107,7 @@ class Trajectory:
             e_ -= serial_length
         traj_list.reverse()
         return traj_list
+
 
 class Trajectory_buffer:
     """Trajectory_buffer
@@ -150,14 +153,15 @@ class Trajectory_buffer:
         self.capacity = capacity
 
         # Initialize Components
-        self.buffer_size = 0;
+        self.buffer_size = 0
         self.buffer = [[] for _ in range(self.depth)]
 
     def __call__(self):
         return self.buffer
 
     def __repr__(self):
-        return f'Trajectory Buffer(buffer capacity = {self.capacity}, return size = {self.return_size})'
+        str = f'Trajectory Buffer(capacity = {self.capacity}, return_size = {self.return_size})'
+        return str
 
     def __len__(self):
         return self.buffer_size
@@ -180,7 +184,7 @@ class Trajectory_buffer:
         self.buffer_size += 1
 
     def extend(self, trajs):
-        for traj in  trajs:
+        for traj in trajs:
             for i, elem in enumerate(traj):
                 self.buffer[i].append(elem)
         self.buffer_size += len(trajs)
@@ -202,5 +206,6 @@ class Trajectory_buffer:
             raise NotImplementedError
         return ret
 
+
 if __name__ == '__main__':
-    pass
+    print('Debuging Mode')
