@@ -3,9 +3,6 @@ import tensorflow.contrib.layers as layers
 import tensorflow.contrib.rnn as rnn
 
 import numpy as np
-import random
-
-import utility
 
 
 class ActorCritic:
