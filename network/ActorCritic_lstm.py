@@ -138,7 +138,8 @@ class ActorCritic:
                                 biases_initializer=tf.zeros_initializer(),
                                 padding='SAME')
             serial_net = layers.flatten(net)
-            bulk_shape = tf.stack([tf.shape(self.state_input_)[0:2],
+            bulk_shape = tf.stack([tf.shape(self.state_input_)[0],
+                                   tf.shape(self.state_input_)[1],
                                    self.serial_size])
             serial_net = layers.fully_connected(net, self.serial_size)
             serial_net = tf.reshape(serial_net, bulk_shape)
@@ -253,7 +254,7 @@ class ActorCritic:
 
             # Actor Loss
             obj_func = tf.log(tf.reduce_sum(self.action * self.actions_flat_OH, 1))
-            exp_v = obj_func * self.mask * self.advantage_ + self.entropy_beta * self.entropy
+            exp_v = obj_func * self.advantage_ * self.mask + self.entropy_beta * self.entropy
             self.actor_loss = tf.reduce_mean(-exp_v, name='actor_loss')
 
             # Total Loss
@@ -333,7 +334,15 @@ class ActorCritic:
         action = [np.random.choice(self.action_size, p=prob/sum(prob)) for prob in action_prob]
         return action, critic, final_state
 
-    def update_global(self, feed_dict):
+    def feed_backward(self, states, actions, td_targets, advantages, rnn_init_states, seq_lens):
+        feed_dict = {
+            self.state_input: states,
+            self.action_: actions,
+            self.td_target_: td_targets,
+            self.advantage_: advantages,
+            self.rnn_init_states_: rnn_init_states,
+            self.seq_len_: seq_lens
+        }
         self.sess.run(self.update_ops, feed_dict)
         al, cl, etrpy = self.sess.run([self.actor_loss, self.critic_loss, self.entropy], feed_dict)
 
