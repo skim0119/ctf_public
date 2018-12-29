@@ -284,7 +284,7 @@ class ActorCritic:
                         self.a_vars, self.global_network.a_vars)]
                     pull_c_vars_op = [local_var.assign(glob_var) for local_var, glob_var in zip(
                         self.c_vars, self.global_network.c_vars)]
-                    self.pull_op = tf.group(pull_a_vars_op, pull_c_vars_op)
+                    self.pull_ops = tf.group(pull_a_vars_op, pull_c_vars_op)
 
                 # Push local weights to global weights
                 with tf.name_scope('push'):
@@ -307,8 +307,8 @@ class ActorCritic:
             with tf.name_scope('sync'):
                 # Pull global weights to local weights
                 with tf.name_scope('pull'):
-                    self.pull_op = [local_var.assign(glob_var)
-                                    for local_var, glob_var in zip(self.graph_vars, self.global_network.graph_vars)]
+                    self.pull_ops = [local_var.assign(glob_var)
+                                     for local_var, glob_var in zip(self.graph_vars, self.global_network.graph_vars)]
 
                 # Push local weights to global weights
                 with tf.name_scope('push'):
@@ -324,11 +324,14 @@ class ActorCritic:
         else:
             self.optimizer = tf.train.AdamOptimizer(self.lr_critic, name='Adam')
 
-    def run_network(self, feed_dict):
-        # Forward Propagation
-        a_probs, critic, rnn_state = self.sess.run(
-            [self.actor, self.critic, self.rnn_state], feed_dict)
-        return [np.random.choice(self.action_size, p=prob/sum(prob)) for prob in a_probs], critic, rnn_state
+    def feed_forward(self, state, rnn_init_state, seq_len=[1]):
+        feed_dict = {self.state_input_: state,
+                     self.rnn_init_states_: rnn_init_state,
+                     self.seq_len_: seq_len}
+        action_prob, critic, final_state = self.sess.run(
+            [self.action, self.critic, self.final_state], feed_dict)
+        action = [np.random.choice(self.action_size, p=prob/sum(prob)) for prob in action_prob]
+        return action, critic, final_state
 
     def update_global(self, feed_dict):
         self.sess.run(self.update_ops, feed_dict)
@@ -337,7 +340,7 @@ class ActorCritic:
         return al, cl, etrpy
 
     def pull_global(self):
-        self.sess.run(self.pull_op)
+        self.sess.run(self.pull_ops)
 
     def get_lstm_initial(self):
         init_state = np.zeros((self.rnn_num_layers, 1, self.rnn_unit_size)
