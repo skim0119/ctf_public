@@ -105,8 +105,11 @@ class ActorCritic:
             self.rewards_flatten = tf.reshape(self.reward_, (-1,))
 
             self.td_target_ = tf.placeholder(
-                shape=[None], dtype=tf.float32, name='td_target_holder')
-            self.advantage_ = tf.placeholder(shape=[None], dtype=tf.float32, name='adv_holder')
+                shape=[None, None], dtype=tf.float32, name='td_target_holder')
+            self.advantage_ = tf.placeholder(
+                shape=[None, None], dtype=tf.float32, name='adv_holder')
+            self.td_target_flat = tf.reshape(self.td_target_, (-1,))
+            self.advantage_flat = tf.reshape(self.advantage_, (-1,))
             # self.likelihood_ = tf.placeholder(shape[None], dtype=tf.float32, name='likelihood_holder')
             # self.likelihood_cumprod_ = tf.placeholder(shape[None], dtype=tf.float32, name='likelihood_cumprod_holder')
 
@@ -248,13 +251,13 @@ class ActorCritic:
             self.entropy = tf.reduce_mean(self.entropy, name='entropy')
 
             # Critic (value) Loss
-            td_error = self.td_target_ - self.critic
+            td_error = self.td_target_flat - self.critic
             self.critic_loss = tf.reduce_mean(tf.square(td_error*self.mask),  # * self.likelihood_cumprod_),
                                               name='critic_loss')
 
             # Actor Loss
             obj_func = tf.log(tf.reduce_sum(self.action * self.actions_flat_OH, 1))
-            exp_v = obj_func * self.advantage_ * self.mask + self.entropy_beta * self.entropy
+            exp_v = obj_func * self.advantage_flat * self.mask + self.entropy_beta * self.entropy
             self.actor_loss = tf.reduce_mean(-exp_v, name='actor_loss')
 
             # Total Loss
