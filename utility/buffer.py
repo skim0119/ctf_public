@@ -205,4 +205,13 @@ class Trajectory_buffer:
 
 
 if __name__ == '__main__':
-    print('Debuging Mode')
+    print('Debuging')
+    a = np.random.randint(5, size=10)
+    b = np.random.randint(5, size=10)
+
+    tr = Trajectory(depth=2)
+    for t in zip(a, b):
+        tr.append(t)
+    print(f'Original two list : {a}, {b}')
+    print(f'Buffer: {tr.buffer}')
+    print(f'Trim by 3 : {[ttr.buffer for ttr in tr.trim(3)]}')
