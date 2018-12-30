@@ -82,9 +82,8 @@ class ActorCritic:
         with tf.variable_scope(self.scope):
             self._build_placeholders()
             self._build_network()
-            if scope == 'global':
-                self._build_optimizer()
-            else:
+            self._build_optimizer()
+            if scope != 'global':
                 self._build_losses()
                 self._build_pipeline()
 
@@ -127,19 +126,19 @@ class ActorCritic:
                                 activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
-                                padding='SAME')
+                                padding='VALID')
             net = layers.max_pool2d(net, [2, 2])
             net = layers.conv2d(net, 64, [3, 3],
                                 activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
-                                padding='SAME')
+                                padding='VALID')
             net = layers.max_pool2d(net, [2, 2])
             net = layers.conv2d(net, 64, [2, 2],
                                 activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
-                                padding='SAME')
+                                padding='VALID')
             serial_net = layers.flatten(net)
             bulk_shape = tf.stack([tf.shape(self.state_input_)[0],
                                    tf.shape(self.state_input_)[1],
@@ -236,7 +235,7 @@ class ActorCritic:
                                                  weights_initializer=layers.xavier_initializer(),
                                                  biases_initializer=tf.zeros_initializer(),
                                                  activation_fn=None)
-            self.critic = tf.reshape(self.critic, (-1))
+            self.critic = tf.reshape(self.critic, (-1,))
 
         if self.separate_train:
             self.a_vars = tf.get_collection(
@@ -267,7 +266,7 @@ class ActorCritic:
 
             # Actor Loss
             obj_func = tf.log(tf.reduce_sum(self.action * self.actions_flat_OH, 1))
-            exp_v = obj_func * self.advantage_flat * self.mask + self.entropy_beta * self.entropy
+            exp_v = obj_func * self.advantage_flat * self.mask  # + self.entropy_beta * self.entropy
             self.actor_loss = tf.reduce_mean(-exp_v, name='actor_loss')
 
             # Total Loss
@@ -323,7 +322,6 @@ class ActorCritic:
 
     def _build_optimizer(self):
         """ Optimizer """
-        assert self.scope == 'global'
         if self.separate_train:
             self.critic_optimizer = tf.train.AdamOptimizer(self.lr_critic, name='Adam_critic')
             self.actor_optimizer = tf.train.AdamOptimizer(self.lr_actor, name='Adam_actor')
@@ -341,7 +339,7 @@ class ActorCritic:
 
     def feed_backward(self, states, actions, td_targets, advantages, rnn_init_states, seq_lens):
         feed_dict = {
-            self.state_input: states,
+            self.state_input_: states,
             self.action_: actions,
             self.td_target_: td_targets,
             self.advantage_: advantages,
