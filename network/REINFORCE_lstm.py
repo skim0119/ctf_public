@@ -74,7 +74,7 @@ class REINFORCE:
             self.action_ = tf.placeholder(shape=[None, None], dtype=tf.int32, name='action')
             self.reward_ = tf.placeholder(shape=[None, None], dtype=tf.float32, name='reward')
             self.actions_flatten = tf.reshape(self.action_, (-1,))
-            self.actions_flatten = tf.one_hot(self.actions_flatten, self.action_size)
+            self.actions_OH = tf.one_hot(self.actions_flatten, self.action_size)
             self.rewards_flatten = tf.reshape(self.reward_, (-1,))
 
     def _build_network(self):
@@ -131,11 +131,15 @@ class REINFORCE:
             self.entropy = -tf.reduce_sum(self.output * tf.log(self.output+1e-8), axis=1)
             self.entropy = tf.multiply(self.entropy, self.mask)
             self.entropy = tf.reduce_mean(self.entropy, name='entropy')
+
+            self.loss = tf.reduce_mean(tf.square(self.output - self.actions_OH), axis=1)  # L2 loss
+            self.loss = tf.multiply(self.loss, self.mask)
+            self.loss = tf.reduce_mean(tf.multiply(self.loss, self.rewards_flatten))
             
-            obj_func = tf.log(tf.reduce_sum(self.output * self.actions_flatten, 1))
-            exp_v = obj_func * self.mask * self.rewards_flatten
-            self.loss = tf.reduce_mean(-exp_v, name='actor_loss')
-            self.loss = self.loss  # + self.entropy_beta * self.entropy
+            #obj_func = tf.log(tf.reduce_sum(self.output * self.actions_flatten, 1))
+            #exp_v = obj_func * self.rewards_flatten * self.mask
+            #self.loss = tf.reduce_mean(-exp_v, name='actor_loss')
+            #self.loss = self.loss  # + self.entropy_beta * self.entropy
 
     def _build_optimizer(self):
         """ Define optimizer and gradient """
