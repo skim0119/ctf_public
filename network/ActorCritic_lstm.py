@@ -231,11 +231,13 @@ class ActorCritic:
             self.action = tf.nn.softmax(self.logit, name='action')
 
         with tf.variable_scope('critic'):
-            self.critic = layers.fully_connected(tf.stop_gradient(net),
+            self.critic = layers.fully_connected(net,
                                                  1,
                                                  weights_initializer=layers.xavier_initializer(),
                                                  biases_initializer=tf.zeros_initializer(),
                                                  activation_fn=None)
+            self.critic = tf.reshape(self.critic, (-1))
+
         if self.separate_train:
             self.a_vars = tf.get_collection(
                 tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/actor')
