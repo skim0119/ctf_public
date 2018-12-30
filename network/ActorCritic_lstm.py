@@ -95,7 +95,7 @@ class ActorCritic:
             self.rnn_init_states_ = tf.placeholder(shape=[self.rnn_num_layers, None, self.rnn_unit_size],
                                                    dtype=tf.float32,
                                                    name="rnn_init_states")
-            self.seq_len = tf.placeholder(shape=(None,), dtype=tf.int32, name="seq_len")
+            self.seq_len_ = tf.placeholder(shape=(None,), dtype=tf.int32, name="seq_len")
 
         with tf.name_scope('Backward_input'):
             self.action_ = tf.placeholder(shape=[None, None], dtype=tf.int32, name='action')
@@ -236,13 +236,21 @@ class ActorCritic:
                                                  weights_initializer=layers.xavier_initializer(),
                                                  biases_initializer=tf.zeros_initializer(),
                                                  activation_fn=None)
-
+        if self.separate_train:
+            self.a_vars = tf.get_collection(
+                tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/actor')
+            self.c_vars = tf.get_collection(
+                tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/critic')
+        else:
+            self.graph_vars = tf.get_collection(
+                tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope)
+        
     def _build_losses(self):
         """ Loss function """
         with tf.name_scope('train'), tf.device('/gpu:0'):
             with tf.name_scope('masker'):
                 num_step = tf.shape(self.state_input_)[1]
-                self.mask = tf.sequence_mask(self.seq_len, num_step)
+                self.mask = tf.sequence_mask(self.seq_len_, num_step)
                 self.mask = tf.reshape(tf.cast(self.mask, tf.float32), (-1,))
 
             # Entropy
@@ -266,11 +274,6 @@ class ActorCritic:
     def _build_pipeline(self):
         """ Define gradient and pipeline to global network """
         if self.separate_train:
-            self.a_vars = tf.get_collection(
-                tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/actor')
-            self.c_vars = tf.get_collection(
-                tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/critic')
-
             with tf.name_scope('local_grad'):
                 a_grads = tf.gradients(self.actor_loss, self.a_vars)
                 c_grads = tf.gradients(self.critic_loss, self.c_vars)
@@ -284,10 +287,8 @@ class ActorCritic:
             with tf.name_scope('sync'):
                 # Pull global weights to local weights
                 with tf.name_scope('pull'):
-                    pull_a_vars_op = [local_var.assign(glob_var) for local_var, glob_var in zip(
-                        self.a_vars, self.global_network.a_vars)]
-                    pull_c_vars_op = [local_var.assign(glob_var) for local_var, glob_var in zip(
-                        self.c_vars, self.global_network.c_vars)]
+                    pull_a_vars_op = [local_var.assign(glob_var) for local_var, glob_var in zip(self.a_vars, self.global_network.a_vars)]
+                    pull_c_vars_op = [local_var.assign(glob_var) for local_var, glob_var in zip(self.c_vars, self.global_network.c_vars)]
                     self.pull_ops = tf.group(pull_a_vars_op, pull_c_vars_op)
 
                 # Push local weights to global weights
@@ -298,9 +299,6 @@ class ActorCritic:
                         zip(c_grads, self.global_network.c_vars))
                     self.update_ops = tf.group(update_a_op, update_c_op)
         else:
-            self.graph_vars = tf.get_collection(
-                tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope)
-
             with tf.name_scope('local_grad'):
                 grads = tf.gradients(self.total_loss, self.graph_vars)
                 if self.grad_clip_norm:
