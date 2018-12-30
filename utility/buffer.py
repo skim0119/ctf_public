@@ -1,7 +1,4 @@
 import numpy as np
-import random
-import collections
-from collections import defaultdict, deque
 
 """ Buffer modules in CtF Project
 
@@ -14,7 +11,7 @@ Classes:
         The storage is in order of push, and it is stored in 2-D list
         The 'trim' method to divide the trajectory into sub-trajectories.
 
-    :Trajectory Buffer: Advanced buffer used to keep the trajectory correlation between samples
+    :Trajectory_buffer: Advanced buffer used to keep the trajectory correlation between samples
         Advanced version of Experience Buffer.
         The container in format of multidimension list.
         The sampling returns the column of trajectories in numpy list.
