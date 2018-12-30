@@ -132,21 +132,14 @@ class REINFORCE:
             self.entropy = tf.multiply(self.entropy, self.mask)
             self.entropy = tf.reduce_mean(self.entropy, name='entropy')
 
-<<<<<<< HEAD
-            obj_func = tf.log(tf.reduce_sum(self.output * self.actions_flatten, 1))
-            exp_v = obj_func * self.rewards_flatten
-            self.loss = tf.reduce_mean(-exp_v, name='actor_loss')
-            self.loss = self.loss  # + self.entropy_beta * self.entropy
-=======
             self.loss = tf.reduce_mean(tf.square(self.output - self.actions_OH), axis=1)  # L2 loss
             self.loss = tf.multiply(self.loss, self.mask)
             self.loss = tf.reduce_mean(tf.multiply(self.loss, self.rewards_flatten))
-            
+
             #obj_func = tf.log(tf.reduce_sum(self.output * self.actions_flatten, 1))
             #exp_v = obj_func * self.rewards_flatten * self.mask
             #self.loss = tf.reduce_mean(-exp_v, name='actor_loss')
-            #self.loss = self.loss  # + self.entropy_beta * self.entropy
->>>>>>> 79c9d86d987fb40df9990427f437e5aab17cc45d
+            # self.loss = self.loss  # + self.entropy_beta * self.entropy
 
     def _build_optimizer(self):
         """ Define optimizer and gradient """
