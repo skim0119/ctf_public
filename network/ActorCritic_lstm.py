@@ -144,7 +144,7 @@ class ActorCritic:
             bulk_shape = tf.stack([tf.shape(self.state_input_)[0],
                                    tf.shape(self.state_input_)[1],
                                    self.serial_size])
-            serial_net = layers.fully_connected(net, self.serial_size)
+            serial_net = layers.fully_connected(serial_net, self.serial_size)
             serial_net = tf.reshape(serial_net, bulk_shape)
 
             # Recursive Network
