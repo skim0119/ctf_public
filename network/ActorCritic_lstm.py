@@ -244,7 +244,7 @@ class ActorCritic:
         else:
             self.graph_vars = tf.get_collection(
                 tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope)
-        
+
     def _build_losses(self):
         """ Loss function """
         with tf.name_scope('train'), tf.device('/gpu:0'):
@@ -287,8 +287,10 @@ class ActorCritic:
             with tf.name_scope('sync'):
                 # Pull global weights to local weights
                 with tf.name_scope('pull'):
-                    pull_a_vars_op = [local_var.assign(glob_var) for local_var, glob_var in zip(self.a_vars, self.global_network.a_vars)]
-                    pull_c_vars_op = [local_var.assign(glob_var) for local_var, glob_var in zip(self.c_vars, self.global_network.c_vars)]
+                    pull_a_vars_op = [local_var.assign(glob_var) for local_var, glob_var in zip(
+                        self.a_vars, self.global_network.a_vars)]
+                    pull_c_vars_op = [local_var.assign(glob_var) for local_var, glob_var in zip(
+                        self.c_vars, self.global_network.c_vars)]
                     self.pull_ops = tf.group(pull_a_vars_op, pull_c_vars_op)
 
                 # Push local weights to global weights
@@ -333,7 +335,7 @@ class ActorCritic:
         action_prob, critic, final_state = self.sess.run(
             [self.action, self.critic, self.final_state], feed_dict)
         action = [np.random.choice(self.action_size, p=prob/sum(prob)) for prob in action_prob]
-        return action, critic, final_state
+        return action, critic.tolist(), final_state
 
     def feed_backward(self, states, actions, td_targets, advantages, rnn_init_states, seq_lens):
         feed_dict = {
