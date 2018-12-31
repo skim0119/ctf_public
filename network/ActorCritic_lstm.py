@@ -154,6 +154,7 @@ class ActorCritic:
                                                           serial_net,
                                                           initial_state=rnn_tuple_state,
                                                           sequence_length=self.seq_len_)
+            rnn_net = tf.unstack(rnn_net, 1)[-1]
             net = tf.reshape(rnn_net, [-1, self.rnn_unit_size])
 
             # ------------------------------------------------------------------------------------
