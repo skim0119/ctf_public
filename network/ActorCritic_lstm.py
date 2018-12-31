@@ -75,9 +75,9 @@ class ActorCritic:
         self.output_tag = self.scope + '/actor/action'
 
         # RNN Configurations
-        self.serial_size = 128  # length of the serial layer (between conv and rnn)
-        self.rnn_unit_size = 128  # RNN number of hidden nodes
-        self.rnn_num_layers = 3  # RNN number of layers
+        self.serial_size = 256 # length of the serial layer (between conv and rnn)
+        self.rnn_unit_size = 256 # RNN number of hidden nodes
+        self.rnn_num_layers = 1  # RNN number of layers
 
         with tf.variable_scope(self.scope):
             self._build_placeholders()
@@ -89,28 +89,28 @@ class ActorCritic:
 
     def _build_placeholders(self):
         """ Define the placeholders for forward and back propagation """
-        with tf.name_scope('Forward_input'):
-            self.state_input_ = tf.placeholder(shape=self.in_size, dtype=tf.float32, name='state')
-            self.rnn_init_states_ = tf.placeholder(shape=[self.rnn_num_layers, None, self.rnn_unit_size],
-                                                   dtype=tf.float32,
-                                                   name="rnn_init_states")
-            self.seq_len_ = tf.placeholder(shape=(None,), dtype=tf.int32, name="seq_len")
+        # Forward
+        self.state_input_ = tf.placeholder(shape=self.in_size, dtype=tf.float32, name='state')
+        self.rnn_init_states_ = tf.placeholder(shape=[self.rnn_num_layers, None, self.rnn_unit_size],
+                                               dtype=tf.float32,
+                                               name="rnn_init_states")
+        self.seq_len_ = tf.placeholder(shape=(None,), dtype=tf.int32, name="seq_len")
 
-        with tf.name_scope('Backward_input'):
-            self.action_ = tf.placeholder(shape=[None, None], dtype=tf.int32, name='action')
-            self.reward_ = tf.placeholder(shape=[None, None], dtype=tf.float32, name='reward')
-            self.actions_flatten = tf.reshape(self.action_, (-1,))
-            self.actions_flat_OH = tf.one_hot(self.actions_flatten, self.action_size)
-            self.rewards_flatten = tf.reshape(self.reward_, (-1,))
+        # Backward
+        self.action_ = tf.placeholder(shape=[None, None], dtype=tf.int32, name='action')
+        self.reward_ = tf.placeholder(shape=[None, None], dtype=tf.float32, name='reward')
+        self.actions_flatten = tf.reshape(self.action_, (-1,))
+        self.actions_flat_OH = tf.one_hot(self.actions_flatten, self.action_size)
+        self.rewards_flatten = tf.reshape(self.reward_, (-1,))
 
-            self.td_target_ = tf.placeholder(
-                shape=[None, None], dtype=tf.float32, name='td_target_holder')
-            self.advantage_ = tf.placeholder(
-                shape=[None, None], dtype=tf.float32, name='adv_holder')
-            self.td_target_flat = tf.reshape(self.td_target_, (-1,))
-            self.advantage_flat = tf.reshape(self.advantage_, (-1,))
-            # self.likelihood_ = tf.placeholder(shape[None], dtype=tf.float32, name='likelihood_holder')
-            # self.likelihood_cumprod_ = tf.placeholder(shape[None], dtype=tf.float32, name='likelihood_cumprod_holder')
+        self.td_target_ = tf.placeholder(
+            shape=[None, None], dtype=tf.float32, name='td_target_holder')
+        self.advantage_ = tf.placeholder(
+            shape=[None, None], dtype=tf.float32, name='adv_holder')
+        self.td_target_flat = tf.reshape(self.td_target_, (-1,))
+        self.advantage_flat = tf.reshape(self.advantage_, (-1,))
+        # self.likelihood_ = tf.placeholder(shape[None], dtype=tf.float32, name='likelihood_holder')
+        # self.likelihood_cumprod_ = tf.placeholder(shape[None], dtype=tf.float32, name='likelihood_cumprod_holder')
 
     def _build_network(self):
         """ Define network
@@ -126,19 +126,19 @@ class ActorCritic:
                                 activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
-                                padding='VALID')
+                                padding='SAME')
             net = layers.max_pool2d(net, [2, 2])
             net = layers.conv2d(net, 64, [3, 3],
                                 activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
-                                padding='VALID')
+                                padding='SAME')
             net = layers.max_pool2d(net, [2, 2])
             net = layers.conv2d(net, 64, [2, 2],
                                 activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
-                                padding='VALID')
+                                padding='SAME')
             serial_net = layers.flatten(net)
             bulk_shape = tf.stack([tf.shape(self.state_input_)[0],
                                    tf.shape(self.state_input_)[1],
@@ -255,19 +255,25 @@ class ActorCritic:
                 self.mask = tf.reshape(tf.cast(self.mask, tf.float32), (-1,))
 
             # Entropy
-            self.entropy = -tf.reduce_sum(self.action * tf.log(self.action + 1e-8))
-            self.entropy = tf.multiply(self.entropy, self.mask)
-            self.entropy = tf.reduce_mean(self.entropy, name='entropy')
+            #self.entropy = tf.multiply(self.entropy, self.mask)
+            self.entropy = -tf.reduce_mean(self.action * tf.log(self.action + 1e-8), name='entropy')
 
             # Critic (value) Loss
             td_error = self.td_target_flat - self.critic
-            self.critic_loss = tf.reduce_mean(tf.square(td_error*self.mask),  # * self.likelihood_cumprod_),
+            #self.critic_loss = tf.reduce_mean(tf.square(td_error*self.mask),  # * self.likelihood_cumprod_),
+            self.critic_loss = tf.reduce_mean(tf.square(td_error),  # * self.likelihood_cumprod_),
                                               name='critic_loss')
 
             # Actor Loss
-            obj_func = tf.log(tf.reduce_sum(self.action * self.actions_flat_OH, 1))
-            exp_v = obj_func * self.advantage_flat * self.mask  # + self.entropy_beta * self.entropy
-            self.actor_loss = tf.reduce_mean(-exp_v, name='actor_loss')
+            obj_func = tf.nn.sparse_softmax_cross_entropy_with_logits(
+                                            logits=self.logit,
+                                            labels=self.actions_flatten)
+            #obj_func = tf.multiply(obj_func, self.mask)
+            self.actor_loss = -tf.reduce_mean(obj_func * self.advantage_flat, name='actor_loss')
+            
+            #obj_func = tf.log(tf.reduce_sum(self.action * self.actions_flat_OH, 1))
+            #exp_v = obj_func * self.advantage_flat * self.mask  # + self.entropy_beta * self.entropy
+            #self.actor_loss = tf.reduce_mean(-exp_v, name='actor_loss')
 
             # Total Loss
             self.total_loss = self.critic_beta * self.critic_loss + self.actor_loss
