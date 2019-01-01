@@ -140,10 +140,9 @@ class ActorCritic:
                                 biases_initializer=tf.zeros_initializer(),
                                 padding='SAME')
             serial_net = layers.flatten(net)
-            bulk_shape = tf.stack([tf.shape(self.state_input_)[0],
-                                   tf.shape(self.state_input_)[1],
-                                   self.serial_size])
             serial_net = layers.fully_connected(serial_net, self.serial_size)
+            batch_length, seq_length = tf.shape(self.state_input_)[0], tf.shape(self.state_input_)[1]
+            bulk_shape = tf.stack([batch_length, seq_length, self.serial_size])
             serial_net = tf.reshape(serial_net, bulk_shape)
 
             # Recursive Network
@@ -154,7 +153,6 @@ class ActorCritic:
                                                           serial_net,
                                                           initial_state=rnn_tuple_state,
                                                           sequence_length=self.seq_len_)
-            rnn_net = tf.unstack(rnn_net, 1)[-1]
             net = tf.reshape(rnn_net, [-1, self.rnn_unit_size])
 
             # ------------------------------------------------------------------------------------
@@ -270,7 +268,7 @@ class ActorCritic:
                                             logits=self.logit,
                                             labels=self.actions_flatten)
             #obj_func = tf.multiply(obj_func, self.mask)
-            self.actor_loss = -tf.reduce_mean(obj_func * self.advantage_flat, name='actor_loss')
+            self.actor_loss = tf.reduce_mean(obj_func * self.advantage_flat, name='actor_loss')
             
             #obj_func = tf.log(tf.reduce_sum(self.action * self.actions_flat_OH, 1))
             #exp_v = obj_func * self.advantage_flat * self.mask  # + self.entropy_beta * self.entropy
