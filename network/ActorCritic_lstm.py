@@ -229,7 +229,7 @@ class ActorCritic:
             self.action = tf.nn.softmax(self.logit, name='action')
 
         with tf.variable_scope('critic'):
-            self.critic = layers.fully_connected(net,
+            self.critic = layers.fully_connected(tf.stop_gradient(net),
                                                  1,
                                                  weights_initializer=layers.xavier_initializer(),
                                                  biases_initializer=tf.zeros_initializer(),
@@ -241,6 +241,7 @@ class ActorCritic:
                 tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/actor')
             self.c_vars = tf.get_collection(
                 tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/critic')
+            self.graph_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope)
         else:
             self.graph_vars = tf.get_collection(
                 tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope)
@@ -281,26 +282,32 @@ class ActorCritic:
         """ Define gradient and pipeline to global network """
         if self.separate_train:
             with tf.name_scope('local_grad'):
+                #a_grads, a_vars = zip(*self.global_network.actor_optimizer.compute_gradients(self.actor_loss))
+                #c_grads, c_vars = zip(*self.global_network.critic_optimizer.compute_gradients(self.critic_loss))
+                
                 a_grads = tf.gradients(self.actor_loss, self.a_vars)
                 c_grads = tf.gradients(self.critic_loss, self.c_vars)
                 if self.grad_clip_norm:
-                    a_grads = [(tf.clip_by_norm(grad, self.grad_clip_norm), var)
-                               for grad, var in a_grads if grad is not None]
-                    c_grads = [(tf.clip_by_norm(grad, self.grad_clip_norm), var)
-                               for grad, var in c_grads if grad is not None]
+                    a_grads = [tf.clip_by_value(grad, -10, 10)
+                               for grad in a_grads if grad is not None]
+                    c_grads = [tf.clip_by_value(grad, -10, 10)
+                               for grad in c_grads if grad is not None]
+                    #a_grads = [tf.clip_by_norm(grad, self.grad_clip_norm)
+                    #           for grad in a_grads if grad is not None]
+                    #c_grads = [tf.clip_by_norm(grad, self.grad_clip_norm)
+                    #           for grad in c_grads if grad is not None]
 
             # Sync with Global Network
             with tf.name_scope('sync'):
                 # Pull global weights to local weights
                 with tf.name_scope('pull'):
-                    pull_a_vars_op = [local_var.assign(glob_var) for local_var, glob_var in zip(
-                        self.a_vars, self.global_network.a_vars)]
-                    pull_c_vars_op = [local_var.assign(glob_var) for local_var, glob_var in zip(
-                        self.c_vars, self.global_network.c_vars)]
-                    self.pull_ops = tf.group(pull_a_vars_op, pull_c_vars_op)
-
+                    self.pull_ops = [local_var.assign(glob_var)
+                                     for local_var, glob_var in zip(self.graph_vars, self.global_network.graph_vars)]
                 # Push local weights to global weights
                 with tf.name_scope('push'):
+                    #update_a_op = self.global_network.actor_optimizer.apply_gradients(zip(a_grads, a_vars))
+                    #update_c_op = self.global_network.critic_optimizer.apply_gradients(zip(c_grads, c_vars))
+                    
                     update_a_op = self.global_network.actor_optimizer.apply_gradients(
                         zip(a_grads, self.global_network.a_vars))
                     update_c_op = self.global_network.critic_optimizer.apply_gradients(
@@ -319,11 +326,17 @@ class ActorCritic:
                 with tf.name_scope('pull'):
                     self.pull_ops = [local_var.assign(glob_var)
                                      for local_var, glob_var in zip(self.graph_vars, self.global_network.graph_vars)]
-
                 # Push local weights to global weights
                 with tf.name_scope('push'):
                     self.update_ops = self.global_network.optimizer.apply_gradients(
                         zip(grads, self.global_network.graph_vars))
+        if self.scope == 'W_1':
+            print('Actor Route Gradient')
+            for g, v in zip(a_grads, self.a_vars):
+                print(g, v)
+            print('Critic Route Gradient')
+            for g, v in zip(c_grads, self.c_vars):
+                print(g, v)
 
     def _build_optimizer(self):
         """ Optimizer """
