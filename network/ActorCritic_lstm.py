@@ -287,15 +287,7 @@ class ActorCritic:
             # self.actor_loss = tf.reduce_mean(obj_func * self.advantage_, name='actor_loss')
 
             obj_func = tf.log(tf.reduce_sum(self.action * self.actions_OH, 1))
-<<<<<<< HEAD
             exp_v = obj_func * self.advantage_ - self.entropy_beta * \
-=======
-<<<<<<< HEAD
-            exp_v = obj_func * self.advantage_ - self.entropy_beta * \
-=======
-            exp_v = obj_func * self.advantage_flat - self.entropy_beta * \
->>>>>>> 7a606af75815a45a4e46e69f8acf27873300132c
->>>>>>> 443c57a5ad552468d8ae2b9bacccff1e38140e25
                 self.entropy  # * self.mask  # + self.entropy_beta * self.entropy
             self.actor_loss = tf.reduce_mean(-exp_v, name='actor_loss')
 
