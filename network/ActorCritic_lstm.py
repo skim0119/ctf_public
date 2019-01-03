@@ -98,17 +98,15 @@ class ActorCritic:
 
         # Backward
         self.action_ = tf.placeholder(shape=[None, None], dtype=tf.int32, name='action')
-        self.reward_ = tf.placeholder(shape=[None, None], dtype=tf.float32, name='reward')
+        #self.reward_ = tf.placeholder(shape=[None, None], dtype=tf.float32, name='reward')
         self.actions_flatten = tf.reshape(self.action_, (-1,))
         self.actions_flat_OH = tf.one_hot(self.actions_flatten, self.action_size)
-        self.rewards_flatten = tf.reshape(self.reward_, (-1,))
+        #self.rewards_flatten = tf.reshape(self.reward_, (-1,))
 
         self.td_target_ = tf.placeholder(
-            shape=[None, None], dtype=tf.float32, name='td_target_holder')
+            shape=[None], dtype=tf.float32, name='td_target_holder')
         self.advantage_ = tf.placeholder(
-            shape=[None, None], dtype=tf.float32, name='adv_holder')
-        self.td_target_flat = tf.reshape(self.td_target_[:,-1], (-1,))
-        self.advantage_flat = tf.reshape(self.advantage_[:,-1], (-1,))
+            shape=[None], dtype=tf.float32, name='adv_holder')
         # self.likelihood_ = tf.placeholder(shape[None], dtype=tf.float32, name='likelihood_holder')
         # self.likelihood_cumprod_ = tf.placeholder(shape[None], dtype=tf.float32, name='likelihood_cumprod_holder')
 
@@ -118,10 +116,25 @@ class ActorCritic:
         It includes convolution network, lstm network, and fully-connected networks
         Separate branch for actor and value
 
+        Forward Pass : 
+            input - [batch_size, sequence_length, width, height, channel]
+            reshape - [full_size, width, height, channel]
+            <<CNN>> + <<pooling>>
+            <<FC>> - [full_size, serial_size]
+            reshape - [batch_size, sequence_length, serial_size]
+            <<RNN>>
+            reshape - [batch_size, rnn_unit_size]
+
+            <<FC>> - [batch_size, acion_space]      |     <<FC>> - [batch_size, 1]
+
         """
         with tf.variable_scope('actor'):
+            # Parameter
+            batch_size, seq_length = tf.shape(self.state_input_)[0], tf.shape(self.state_input_)[1]
+            bulk_shape = tf.stack([batch_size, seq_length, self.serial_size])
+
             # Convolution
-            net = tf.reshape(self.state_input_, [-1]+self.in_size[2:])  # Flattening
+            net = tf.reshape(self.state_input_, [-1]+self.in_size[2:])
             net = layers.conv2d(net, 32, [5, 5],
                                 activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
@@ -141,8 +154,6 @@ class ActorCritic:
                                 padding='SAME')
             serial_net = layers.flatten(net)
             serial_net = layers.fully_connected(serial_net, self.serial_size)
-            batch_length, seq_length = tf.shape(self.state_input_)[0], tf.shape(self.state_input_)[1]
-            bulk_shape = tf.stack([batch_length, seq_length, self.serial_size])
             serial_net = tf.reshape(serial_net, bulk_shape)
 
             # Recursive Network
@@ -152,8 +163,9 @@ class ActorCritic:
             rnn_net, self.final_state = tf.nn.dynamic_rnn(rnn_cells,
                                                           serial_net,
                                                           initial_state=rnn_tuple_state,
-                                                          sequence_length=self.seq_len_)
-            net = tf.reshape(rnn_net[:,-1], [-1, self.rnn_unit_size])
+                                                          sequence_length=self.seq_len_
+                                                          )
+            rnn_net = tf.reshape(rnn_net[:,-1], (-1, self.rnn_unit_size)) # Only the last element
 
             # ------------------------------------------------------------------------------------
             # self.rnn_state_in = tf.placeholder(
@@ -220,7 +232,7 @@ class ActorCritic:
             #                                             )
             # net = tf.reshape(rnn_net, [-1, rnn_hidden_size1])
 
-            self.logit = layers.fully_connected(net,
+            self.logit = layers.fully_connected(rnn_net,
                                                 self.action_size,
                                                 weights_initializer=layers.xavier_initializer(),
                                                 biases_initializer=tf.zeros_initializer(),
@@ -229,12 +241,13 @@ class ActorCritic:
             self.action = tf.nn.softmax(self.logit, name='action')
 
         with tf.variable_scope('critic'):
-            self.critic = layers.fully_connected(tf.stop_gradient(net),
-                                                 1,
-                                                 weights_initializer=layers.xavier_initializer(),
-                                                 biases_initializer=tf.zeros_initializer(),
-                                                 activation_fn=None)
-            self.critic = tf.reshape(self.critic, (-1,))
+            critic_net = serial_net[:,-1]
+            critic_net = layers.fully_connected(tf.stop_gradient(critic_net),
+                                                1,
+                                                weights_initializer=layers.xavier_initializer(),
+                                                biases_initializer=tf.zeros_initializer(),
+                                                activation_fn=None)
+            self.critic = tf.reshape(critic_net, (-1,)) # column to row
 
         if self.separate_train:
             self.a_vars = tf.get_collection(
@@ -259,7 +272,7 @@ class ActorCritic:
             self.entropy = -tf.reduce_mean(self.action * tf.log(self.action + 1e-8), name='entropy')
 
             # Critic (value) Loss
-            td_error = self.td_target_flat - self.critic
+            td_error = self.td_target_ - self.critic
             #self.critic_loss = tf.reduce_mean(tf.square(td_error*self.mask),  # * self.likelihood_cumprod_),
             self.critic_loss = tf.reduce_mean(tf.square(td_error),  # * self.likelihood_cumprod_),
                                               name='critic_loss')
@@ -269,7 +282,7 @@ class ActorCritic:
                                             logits=self.logit,
                                             labels=self.actions_flatten)
             #obj_func = tf.multiply(obj_func, self.mask)
-            self.actor_loss = tf.reduce_mean(obj_func * self.advantage_flat, name='actor_loss')
+            self.actor_loss = tf.reduce_mean(obj_func * self.advantage_, name='actor_loss')
             
             #obj_func = tf.log(tf.reduce_sum(self.action * self.actions_flat_OH, 1))
             #exp_v = obj_func * self.advantage_flat #* self.mask  # + self.entropy_beta * self.entropy
