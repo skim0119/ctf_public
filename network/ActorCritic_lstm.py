@@ -75,9 +75,10 @@ class ActorCritic:
         self.output_tag = self.scope + '/actor/action'
 
         # RNN Configurations
+        self.rnn_type = 'GRU'
         self.serial_size = 256  # length of the serial layer (between conv and rnn)
         self.rnn_unit_size = 256  # RNN number of hidden nodes
-        self.rnn_num_layers = 1  # RNN number of layers
+        self.rnn_num_layers = 2  # RNN number of layers
 
         with tf.variable_scope(self.scope):
             self._build_placeholders()
@@ -99,8 +100,8 @@ class ActorCritic:
         # Backward
         self.actions_ = tf.placeholder(shape=[None], dtype=tf.int32, name='action')
         self.actions_OH = tf.one_hot(self.actions_, self.action_size)
-        #self.reward_ = tf.placeholder(shape=[None, None], dtype=tf.float32, name='reward')
-        #self.rewards_flatten = tf.reshape(self.reward_, (-1,))
+        # self.reward_ = tf.placeholder(shape=[None, None], dtype=tf.float32, name='reward')
+        # self.rewards_flatten = tf.reshape(self.reward_, (-1,))
 
         self.td_target_ = tf.placeholder(
             shape=[None], dtype=tf.float32, name='td_target_holder')
@@ -163,9 +164,10 @@ class ActorCritic:
             rnn_net, self.final_state = tf.nn.dynamic_rnn(rnn_cells,
                                                           serial_net,
                                                           initial_state=rnn_tuple_state
-                                                          #sequence_length=self.seq_len_
+                                                          # sequence_length=self.seq_len_
                                                           )
-            rnn_net = tf.reshape(rnn_net[:, -1], (batch_size, self.rnn_unit_size))  # Only the last element
+            # Only the last element
+            rnn_net = tf.reshape(rnn_net[:, -1], (batch_size, self.rnn_unit_size))
 
             # ------------------------------------------------------------------------------------
             # self.rnn_state_in = tf.placeholder(
@@ -268,7 +270,7 @@ class ActorCritic:
                 self.mask = tf.reshape(tf.cast(self.mask, tf.float32), (-1,))
 
             # Entropy
-            #self.entropy = tf.multiply(self.entropy, self.mask)
+            # self.entropy = tf.multiply(self.entropy, self.mask)
             self.entropy = -tf.reduce_mean(self.action * tf.log(self.action + 1e-8), name='entropy')
 
             # Critic (value) Loss
@@ -278,15 +280,16 @@ class ActorCritic:
                                               name='critic_loss')
 
             # Actor Loss
-            obj_func = tf.nn.sparse_softmax_cross_entropy_with_logits(
-                logits=self.logit,
-                labels=self.actions_)
-            #obj_func = tf.multiply(obj_func, self.mask)
-            self.actor_loss = tf.reduce_mean(obj_func * self.advantage_, name='actor_loss')
+            # obj_func = tf.nn.sparse_softmax_cross_entropy_with_logits(
+            #    logits=self.logit,
+            #    labels=self.actions_)
+            # obj_func = tf.multiply(obj_func, self.mask)
+            # self.actor_loss = tf.reduce_mean(obj_func * self.advantage_, name='actor_loss')
 
-            #obj_func = tf.log(tf.reduce_sum(self.action * self.actions_flat_OH, 1))
-            # exp_v = obj_func * self.advantage_flat #* self.mask  # + self.entropy_beta * self.entropy
-            #self.actor_loss = tf.reduce_mean(-exp_v, name='actor_loss')
+            obj_func = tf.log(tf.reduce_sum(self.action * self.actions_OH, 1))
+            exp_v = obj_func * self.advantage_flat - self.entropy_beta * \
+                self.entropy  # * self.mask  # + self.entropy_beta * self.entropy
+            self.actor_loss = tf.reduce_mean(-exp_v, name='actor_loss')
 
             # Total Loss
             self.total_loss = self.critic_beta * self.critic_loss + self.actor_loss
@@ -295,8 +298,8 @@ class ActorCritic:
         """ Define gradient and pipeline to global network """
         if self.separate_train:
             with tf.name_scope('local_grad'):
-                #a_grads, a_vars = zip(*self.global_network.actor_optimizer.compute_gradients(self.actor_loss))
-                #c_grads, c_vars = zip(*self.global_network.critic_optimizer.compute_gradients(self.critic_loss))
+                # a_grads, a_vars = zip(*self.global_network.actor_optimizer.compute_gradients(self.actor_loss))
+                # c_grads, c_vars = zip(*self.global_network.critic_optimizer.compute_gradients(self.critic_loss))
 
                 a_grads = tf.gradients(self.actor_loss, self.a_vars)
                 c_grads = tf.gradients(self.critic_loss, self.c_vars)
@@ -318,8 +321,8 @@ class ActorCritic:
                                      for local_var, glob_var in zip(self.graph_vars, self.global_network.graph_vars)]
                 # Push local weights to global weights
                 with tf.name_scope('push'):
-                    #update_a_op = self.global_network.actor_optimizer.apply_gradients(zip(a_grads, a_vars))
-                    #update_c_op = self.global_network.critic_optimizer.apply_gradients(zip(c_grads, c_vars))
+                    # update_a_op = self.global_network.actor_optimizer.apply_gradients(zip(a_grads, a_vars))
+                    # update_c_op = self.global_network.critic_optimizer.apply_gradients(zip(c_grads, c_vars))
 
                     update_a_op = self.global_network.actor_optimizer.apply_gradients(
                         zip(a_grads, self.global_network.a_vars))
