@@ -157,12 +157,13 @@ class ActorCritic:
 
             # Recursive Network
             rnn_cell = rnn.GRUCell(self.rnn_unit_size)
-            rnn_cells = rnn.MultiRNNCell([rnn_cell] * self.rnn_num_layers)
+            rnn_cell = rnn.DropoutWrapper(rnn_cell, output_keep_prob=0.8)
+            rnn_cells = rnn.MultiRNNCell([rnn_cell for _ in range(self.rnn_num_layers)])
             rnn_tuple_state = tuple(tf.unstack(self.rnn_init_states_, axis=0))
             rnn_net, self.final_state = tf.nn.dynamic_rnn(rnn_cells,
                                                           serial_net,
-                                                          initial_state=rnn_tuple_state,
-                                                          sequence_length=self.seq_len_
+                                                          initial_state=rnn_tuple_state
+                                                          #sequence_length=self.seq_len_
                                                           )
             rnn_net = tf.reshape(rnn_net[:, -1], (batch_size, self.rnn_unit_size))  # Only the last element
 
