@@ -1,11 +1,8 @@
 import tensorflow as tf
 import tensorflow.contrib.layers as layers
-import tensorflow.contrib.rnn as rnn
 
 import numpy as np
-import random
 
-import utility
 
 class ActorCritic:
     """Actor Critic Network Implementation for A3C (Tensorflow)
@@ -17,7 +14,7 @@ class ActorCritic:
 
     Attributes:
         @ Private
-        _build_network : 
+        _build_network :
 
         @ Public
         run_network :
@@ -31,6 +28,7 @@ class ActorCritic:
         pass
 
     """
+
     def __init__(self,
                  in_size,
                  action_size,
@@ -45,8 +43,8 @@ class ActorCritic:
                  lr_c_gamma=1,
                  lr_a_step=0,
                  lr_c_step=0,
-                 entropy_beta = 0.001,
-                 critic_beta = 1.0,
+                 entropy_beta=0.001,
+                 critic_beta=1.0,
                  sess=None,
                  global_network=None,
                  separate_train=False):
@@ -64,11 +62,11 @@ class ActorCritic:
         TODO:
             * Separate the building trainsequence to separete method.
             * Organize the code with pep8 formating
-            
+
         """
 
         # Class Environment
-        self.sess=sess
+        self.sess = sess
 
         # Parameters & Configs
         self.in_size = in_size
@@ -77,66 +75,71 @@ class ActorCritic:
         self.scope = scope
         self.global_step = global_step
         self.separate_train = separate_train
-        
+
         with tf.variable_scope(scope):
             self.local_step = tf.Variable(initial_step, trainable=False, name='local_step')
             # Learning Rate Variables
-            self.lr_actor = tf.train.exponential_decay(lr_actor,
-                                                       self.local_step,
-                                                       lr_a_step,
-                                                       lr_a_gamma,
-                                                       staircase=True,
-                                                       name='lr_actor')
-            self.lr_critic = tf.train.exponential_decay(lr_critic,
-                                                        self.local_step,
-                                                       lr_c_step,
-                                                       lr_c_gamma,
-                                                       staircase=True,
-                                                       name='lr_critic')
-
+            self.lr_actor = lr_actor
+            self.lr_critic = lr_critic
+            # self.lr_actor = tf.train.exponential_decay(lr_actor,
+            #                                           self.local_step,
+            #                                           lr_a_step,
+            #                                           lr_a_gamma,
+            #                                           staircase=True,
+            #                                           name='lr_actor')
+            # self.lr_critic = tf.train.exponential_decay(lr_critic,
+            #                                            self.local_step,
+            #                                            lr_c_step,
+            #                                            lr_c_gamma,
+            #                                            staircase=True,
+            #                                            name='lr_critic')
 
             # global Network
             # Build actor and critic network weights. (global network does not need training sequence)
-            self.state_input = tf.placeholder(shape=in_size,dtype=tf.float32, name='state')
+            self.state_input = tf.placeholder(shape=in_size, dtype=tf.float32, name='state')
 
             # get the parameters of actor and critic networks
             self._build_network()
             if self.separate_train:
-                self.a_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/actor')
-                self.c_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/critic')
+                self.a_vars = tf.get_collection(
+                    tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/actor')
+                self.c_vars = tf.get_collection(
+                    tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/critic')
             else:
-                self.graph_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope)
-                
+                self.graph_vars = tf.get_collection(
+                    tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope)
+
             # Local Network
             if scope == 'global':
                 if self.separate_train:
                     # Optimizer
-                    self.critic_optimizer = tf.train.AdamOptimizer(self.lr_critic, name='Adam_critic')
+                    self.critic_optimizer = tf.train.AdamOptimizer(
+                        self.lr_critic, name='Adam_critic')
                     self.actor_optimizer = tf.train.AdamOptimizer(self.lr_actor, name='Adam_actor')
                 else:
                     # Optimizer
                     self.optimizer = tf.train.AdamOptimizer(self.lr_critic, name='Adam')
             else:
-                self.action_ = tf.placeholder(shape=[None],dtype=tf.int32, name='action_holder')
+                self.action_ = tf.placeholder(shape=[None], dtype=tf.int32, name='action_holder')
                 self.action_OH = tf.one_hot(self.action_, action_size)
-                self.td_target_ = tf.placeholder(shape=[None], dtype=tf.float32, name='td_target_holder')
+                self.td_target_ = tf.placeholder(
+                    shape=[None], dtype=tf.float32, name='td_target_holder')
                 self.advantage_ = tf.placeholder(shape=[None], dtype=tf.float32, name='adv_holder')
 #                 self.likelihood_ = tf.placeholder(shape[None], dtype=tf.float32, name='likelihood_holder')
 #                 self.likelihood_cumprod_ = tf.placeholder(shape[None], dtype=tf.float32, name='likelihood_cumprod_holder')
 
-                #with tf.device('/gpu:0'):
-                with tf.name_scope('train'):
+                with tf.name_scope('train'), tf.device('/gpu:0'):
                     # Critic (value) Loss
-                    td_error = self.td_target_ - self.critic 
+                    td_error = self.td_target_ - self.critic
                     self.entropy = -tf.reduce_mean(self.actor * tf.log(self.actor), name='entropy')
-                    self.critic_loss = tf.reduce_mean(tf.square(td_error), #* self.likelihood_cumprod_),
+                    self.critic_loss = tf.reduce_mean(tf.square(td_error),  # * self.likelihood_cumprod_),
                                                       name='critic_loss')
 
                     # Actor Loss
                     obj_func = tf.log(tf.reduce_sum(self.actor * self.action_OH, 1))
-                    exp_v = obj_func * self.advantage_ 
+                    exp_v = obj_func * self.advantage_
                     self.actor_loss = tf.reduce_mean(-exp_v, name='actor_loss') - entropy_beta * self.entropy
-                    
+
                     self.total_loss = critic_beta * self.critic_loss + self.actor_loss - entropy_beta * self.entropy
 
                 if self.separate_train:
@@ -144,8 +147,10 @@ class ActorCritic:
                         a_grads = tf.gradients(self.actor_loss, self.a_vars)
                         c_grads = tf.gradients(self.critic_loss, self.c_vars)
                         if self.grad_clip_norm:
-                            a_grads = [(tf.clip_by_norm(grad, self.grad_clip_norm), var) for grad, var in a_grads if not grad is None]
-                            c_grads = [(tf.clip_by_norm(grad, self.grad_clip_norm), var) for grad, var in c_grads if not grad is None]
+                            a_grads = [(tf.clip_by_norm(grad, self.grad_clip_norm), var)
+                                       for grad, var in a_grads if grad is not None]
+                            c_grads = [(tf.clip_by_norm(grad, self.grad_clip_norm), var)
+                                       for grad, var in a_grads if grad is not None]
 
                     # Sync with Global Network
                     with tf.name_scope('sync'):
@@ -160,12 +165,13 @@ class ActorCritic:
                             update_a_op = global_network.actor_optimizer.apply_gradients(zip(a_grads, global_network.a_vars))
                             update_c_op = global_network.critic_optimizer.apply_gradients(zip(c_grads, global_network.c_vars))
                             self.update_ops = tf.group(update_a_op, update_c_op)
-                        
+
                 else:
                     with tf.name_scope('local_grad'):
                         grads = tf.gradients(self.total_loss, self.graph_vars)
                         if self.grad_clip_norm:
-                            grads = [(tf.clip_by_norm(grad, self.grad_clip_norm), var) for grad, var in grads if not grad is None]
+                            grads = [(tf.clip_by_norm(grad, self.grad_clip_norm), var)
+                                     for grad, var in grads if grad is not None]
 
                     # Sync with Global Network
                     with tf.name_scope('sync'):
@@ -176,26 +182,25 @@ class ActorCritic:
 
                         # Push local weights to global weights
                         with tf.name_scope('push'):
-                            self.update_ops = global_network.optimizer.apply_gradients(zip(grads, global_network.graph_vars))
-                            
+                            self.update_ops = global_network.optimizer.apply_gradients(
+                                zip(grads, global_network.graph_vars))
+
     def _build_network(self):
         with tf.variable_scope('actor'):
             net = self.state_input
-            net = tf.expand_dims(net,0)
-            net = tf.reshape(net, tf.shape(net)[1:])
-            net = layers.conv2d(net , 32, [5,5],
+            net = layers.conv2d(net, 32, [5, 5],
                                 activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
                                 padding='SAME')
-            net = layers.max_pool2d(net, [2,2])
-            net = layers.conv2d(net, 64, [3,3],
+            net = layers.max_pool2d(net, [2, 2])
+            net = layers.conv2d(net, 64, [3, 3],
                                 activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
                                 padding='SAME')
-            net = layers.max_pool2d(net, [2,2])
-            net = layers.conv2d(net, 64, [2,2],
+            net = layers.max_pool2d(net, [2, 2])
+            net = layers.conv2d(net, 64, [2, 2],
                                 activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
@@ -222,14 +227,13 @@ class ActorCritic:
     # Choose Action
     def run_network(self, feed_dict):
         a_probs, critic = self.sess.run([self.actor, self.critic], feed_dict)
-        return [np.random.choice(self.action_size, p=prob/sum(prob)) for prob in a_probs], critic, None  
+        return [np.random.choice(self.action_size, p=prob/sum(prob)) for prob in a_probs], critic
 
     def update_global(self, feed_dict):
         self.sess.run(self.update_ops, feed_dict)
         al, cl, etrpy = self.sess.run([self.actor_loss, self.critic_loss, self.entropy], feed_dict)
-        
+
         return al, cl, etrpy
 
     def pull_global(self):
         self.sess.run(self.pull_op)
-
