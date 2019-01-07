@@ -185,9 +185,9 @@ class Trajectory_buffer:
             for i, elem in enumerate(traj):
                 self.buffer[i].append(elem)
         self.buffer_size += len(trajs)
-        if len(self.buffer) > self.capacity:
-            self.buffer = self.buffer[-self.capacity:]
-            self.buffer_size = len(self.buffer)
+        # if len(self.buffer) > self.capacity:
+        #     self.buffer = self.buffer[-self.capacity:]
+        #     self.buffer_size = len(self.buffer)
 
     def sample(self, flush=True):
         """sample
@@ -215,3 +215,10 @@ if __name__ == '__main__':
     print(f'Original two list : {a}, {b}')
     print(f'Buffer: {tr.buffer}')
     print(f'Trim by 3 : {[ttr.buffer for ttr in tr.trim(3)]}')
+
+    tr_buf = Trajectory_buffer(depth=2)
+    tr_buf.extend(tr.trim(serial_length=2))
+    s1, s2 = tr_buf.sample()
+    print(f'Trim by 2 : {[ttr.buffer for ttr in tr.trim(2)]}')
+    print(f's1 : {s1}')
+    print(f's2 : {s2}')
