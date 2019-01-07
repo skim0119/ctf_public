@@ -8,7 +8,7 @@ Please include the docstrings for any method or class to easily reference from J
 Any pipeline or data manipulation is excluded: they are included in dataModule.py file.
 
 Methods:
-    discount_rewards(numpy.list, float, bool): 
+    discount_rewards(numpy.list, float, bool):
         Perform discounting reward to the list by the ratio 'gamma'
         Include normalization of the list at the end.
 
@@ -35,17 +35,18 @@ Todo:
 
 """
 
+
 def discount_rewards(rewards, gamma, normalize=False):
-    """ take 1D float numpy array of rewards and compute discounted reward 
+    """ take 1D float numpy array of rewards and compute discounted reward
 
     Args:
         rewards (numpy.array): list of rewards.
         gamma (float): discount rate
-        normalize (bool): If true, normalize at the end (default=False) 
+        normalize (bool): If true, normalize at the end (default=False)
 
     Returns:
         numpy.list : Return discounted reward
-    
+
     """
 
     disc_reward = np.zeros_like(rewards)
@@ -55,9 +56,10 @@ def discount_rewards(rewards, gamma, normalize=False):
         disc_reward[idx] = cumulate_add
 
     if normalize:
-        disc_reward = (disc_reward - np.mean(disc_reward)) / (np.std(disc_reward)+1e-8) # normalize
+        disc_reward = (disc_reward - np.mean(disc_reward)) / (np.std(disc_reward)+1e-8)
 
     return disc_reward
+
 
 def normalize(r):
     """ take 1D float numpy array and normalize it
@@ -67,16 +69,17 @@ def normalize(r):
 
     Returns:
         numpy.list : return normalized list
-    
+
     """
 
-    return (r - np.mean(r)) / (np.std(r)+1e-8) # small addition to avoid dividing by zero
+    return (r - np.mean(r)) / (np.std(r)+1e-8)  # small addition to avoid dividing by zero
 
-def retrace(targets, behaviors, lambda_ = 0.2):
+
+def retrace(targets, behaviors, lambda_=0.2):
     """ take target and behavior policy values, and return the retrace weight
 
     Args:
-        target (1d array float): list of target policy values in series 
+        target (1d array float): list of target policy values in series
             (policy of target network)
         behavior (1d array float): list of target policy values in sequence
             (policy of behavior network)
@@ -93,11 +96,12 @@ def retrace(targets, behaviors, lambda_ = 0.2):
 
     return np.array(weight)
 
-def retrace_prod(targets, behaviors, lambda_ = 0.2):
+
+def retrace_prod(targets, behaviors, lambda_=0.2):
     """ take target and behavior policy values, and return the cumulative product of weights
 
     Args:
-        target (1d array float): list of target policy values in series 
+        target (1d array float): list of target policy values in series
             (policy of target network)
         behavior (1d array float): list of target policy values in sequence
             (policy of behavior network)
@@ -109,45 +113,37 @@ def retrace_prod(targets, behaviors, lambda_ = 0.2):
 
     return np.cumprod(retrace(targets, behaviors, lambda_))
 
+
 class MovingAverage:
     """MovingAverage
-
     Container that only store give size of element, and store moving average.
     Queue structure of container.
-
-    Methods:
-        __init__
-        __call__
-        tolist 
-        extend (list)
-        append (int)
-        clear
-
     """
+
     def __init__(self, size):
         """__init__
 
         :param size: number of element that will be stored in he container
         """
-        from collections import deque 
+        from collections import deque
         self.average = 0.0
         self.size = size
-        
+
         self.queue = deque(maxlen=size)
-        
+
     def __call__(self):
         """__call__"""
         return self.average
-    
+
     def tolist(self):
         """tolist
         Return the elements in the container in (list) structure
         """
         return list(self.queue)
 
-    def extend(self, l:list):
+    def extend(self, l: list):
         """extend
-        
+
         Similar to list.extend
 
         :param l (list): list of number that will be extended in the deque
@@ -156,7 +152,7 @@ class MovingAverage:
         self.queue.extend(l)
         self.size = len(self.queue)
         self.average = sum(self.queue) / self.size
-        
+
     def append(self, n):
         """append
 
@@ -178,6 +174,7 @@ class MovingAverage:
         self.average = 0.0
         self.queue.clear()
 
+
 class Experience_buffer:
     """Experience_buffer
     Experience buffer use for storing tuples for MDP.
@@ -193,50 +190,52 @@ class Experience_buffer:
         sample (int, bool)
         pop (int, bool)
     """
-    def __init__(self, experience_shape=4, buffer_size = 50000):
+
+    def __init__(self, experience_shape=4, buffer_size=50000):
         self.buffer = []
         self.buffer_size = buffer_size
         self.experience_shape = experience_shape
-        
+
     def __len__(self):
         return len(self.buffer)
-    
+
     def add(self, experience):
         if len(self.buffer) + len(experience) >= self.buffer_size:
             self.buffer[0:(len(experience)+len(self.buffer))-self.buffer_size] = []
         self.buffer.extend(experience)
-    
+
     def add_element(self, sample):
         self.buffer.append(sample)
-    
+
     def flush(self):
         # Return the remaining buffer and reset.
-        batch = np.reshape(np.array(self.buffer), [len(self.buffer),self.experience_shape])
+        batch = np.reshape(np.array(self.buffer), [len(self.buffer), self.experience_shape])
         self.buffer = []
         return batch
-    
+
     def empty(self):
-        return len(self.buffer)==0
-    
+        return len(self.buffer) == 0
+
     def sample(self, size=2000, shuffle=False):
         if shuffle:
             random.shuffle(self.buffer)
-            
+
         if size > len(self.buffer):
             return np.array(self.buffer)
         else:
-            #return np.array([self.buffer.pop(random.randrange(len(self.buffer))) for _ in range(size)])
-            return np.reshape(np.array(random.sample(self.buffer,size)),[size,self.experience_shape])
-        
+            # return np.array([self.buffer.pop(random.randrange(len(self.buffer))) for _ in range(size)])
+            return np.reshape(np.array(random.sample(self.buffer, size)), [size, self.experience_shape])
+
     def pop(self, size, shuffle=False):
         # Pop the first `size` items in order (queue).
         if shuffle:
             random.shuffle(self.buffer)
-            
+
         i = min(len(self.buffer), size)
-        batch = np.reshape(np.array(self.buffer[:i]), [i,self.experience_shape])
+        batch = np.reshape(np.array(self.buffer[:i]), [i, self.experience_shape])
         self.buffer = self.buffer[i:]
-        return batch 
-        
+        return batch
+
+
 if __name__ == '__main__':
     pass
