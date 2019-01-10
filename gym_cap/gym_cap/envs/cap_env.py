@@ -38,7 +38,7 @@ class CapEnv(gym.Env):
             self.interaction = self._interaction_stoch
         else: self.interaction = self._interaction_determ
 
-    def reset(self, map_size=None, mode="random", policy_blue=None, policy_red=None):
+    def reset(self, map_size=None, mode="random", policy_blue=None, policy_red=None, seed=None):
         """
         Resets the game
 
@@ -47,7 +47,9 @@ class CapEnv(gym.Env):
         :return: void
 
         """
-
+        if seed is not None:
+            self.seed(seed)
+            
         if map_size is None:
             self._env, self.team_home = CreateMap.gen_map('map', dim=self.map_size[0], rand_zones=STOCH_ZONES)
         else:
@@ -291,8 +293,10 @@ class CapEnv(gym.Env):
         self    : object
             CapEnv object
         """
-        self.np_random, seed = seeding.np_random(seed)
-        return [seed]
+        self.np_random, _seed = seeding.np_random(seed)
+        np.random.seed(seed)
+
+        return [_seed]
 
     def step(self, entities_action=None, cur_suggestions=None):
         """
