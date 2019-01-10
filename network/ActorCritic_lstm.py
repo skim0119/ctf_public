@@ -76,9 +76,9 @@ class ActorCritic:
 
         # RNN Configurations
         self.rnn_type = 'GRU'
-        self.serial_size = 128  # length of the serial layer (between conv and rnn)
-        self.rnn_unit_size = 128  # RNN number of hidden nodes
-        self.rnn_num_layers = 2  # RNN number of layers
+        self.serial_size = 256  # length of the serial layer (between conv and rnn)
+        self.rnn_unit_size = 256  # RNN number of hidden nodes
+        self.rnn_num_layers = 1  # RNN number of layers
 
         with tf.variable_scope(self.scope):
             self._build_placeholders()
@@ -135,25 +135,26 @@ class ActorCritic:
             bulk_shape = tf.stack([batch_size, seq_length, self.serial_size])
 
             # Convolution
-            net = tf.reshape(self.state_input_, [-1] + self.in_size[-3:])
-            net = layers.conv2d(net, 32, [5, 5],
-                                activation_fn=tf.nn.relu,
-                                weights_initializer=layers.xavier_initializer_conv2d(),
-                                biases_initializer=tf.zeros_initializer(),
-                                padding='SAME')
-            net = layers.max_pool2d(net, [2, 2])
-            net = layers.conv2d(net, 64, [3, 3],
-                                activation_fn=tf.nn.relu,
-                                weights_initializer=layers.xavier_initializer_conv2d(),
-                                biases_initializer=tf.zeros_initializer(),
-                                padding='SAME')
-            net = layers.max_pool2d(net, [2, 2])
-            net = layers.conv2d(net, 64, [2, 2],
-                                activation_fn=tf.nn.relu,
-                                weights_initializer=layers.xavier_initializer_conv2d(),
-                                biases_initializer=tf.zeros_initializer(),
-                                padding='SAME')
-            serial_net = layers.flatten(net)
+            # net = tf.reshape(self.state_input_, [-1] + self.in_size[-3:])
+            # net = layers.conv2d(net, 32, [5, 5],
+            #                     activation_fn=tf.nn.relu,
+            #                    weights_initializer=layers.xavier_initializer_conv2d(),
+            #                    biases_initializer=tf.zeros_initializer(),
+            #                    padding='SAME')
+            #net = layers.max_pool2d(net, [2, 2])
+            # net = layers.conv2d(net, 64, [3, 3],
+            #                    activation_fn=tf.nn.relu,
+            #                    weights_initializer=layers.xavier_initializer_conv2d(),
+            #                    biases_initializer=tf.zeros_initializer(),
+            #                    padding='SAME')
+            #net = layers.max_pool2d(net, [2, 2])
+            # net = layers.conv2d(net, 64, [2, 2],
+            #                    activation_fn=tf.nn.relu,
+            #                    weights_initializer=layers.xavier_initializer_conv2d(),
+            #                    biases_initializer=tf.zeros_initializer(),
+            #                    padding='SAME')
+            #serial_net = layers.flatten(net)
+            serial_net = tf.reshape(self.state_input_, [batch_size*seq_length, 3971])
             serial_net = layers.fully_connected(serial_net, self.serial_size)
 
             # Recursive Network
@@ -162,7 +163,7 @@ class ActorCritic:
             rnn_cell = rnn.GRUCell(self.rnn_unit_size)
             rnn_cell = rnn.DropoutWrapper(rnn_cell, output_keep_prob=0.8)
             rnn_cells = rnn.MultiRNNCell([rnn_cell for _ in range(self.rnn_num_layers)])
-            rnn_tuple_state = tuple(tf.unstack(self.rnn_init_states_, axis=0))
+            rnn_tuple_state = tuple(tf.unstack(self.rnn_init_states_, axis=0))  # unstack by rnn layer
             rnn_net, self.final_state = tf.nn.dynamic_rnn(rnn_cells,
                                                           serial_net,
                                                           initial_state=rnn_tuple_state
@@ -178,21 +179,6 @@ class ActorCritic:
                                                 )
             self.action = tf.nn.softmax(self.logit, name='action')
 
-            # ------------------------------------------------------------------------------------
-            # self.rnn_state_in = tf.placeholder(
-            #     tf.float32, [self.lstm_layers, 1, self.rnn_steps])
-            # self.rnn_init_state = np.zeros((self.lstm_layers, 1, self.rnn_steps))
-            # state_per_layer_list = tf.unstack(self.rnn_state_, axis=0)
-            # rnn_tuple_state = tuple([holder_ for holder_ in state_per_layer_list])
-            # cell = tf.nn.rnn_cell.GRUCell(self.rnn_steps, name='gru_cell')
-            # cell = tf.nn.rnn_cell.MultiRNNCell([cell] * self.lstm_layers)
-            # states_series, self.current_state = tf.nn.dynamic_rnn(cell,
-            #                                                       tf.expand_dims(net, [0]),
-            #                                                       initial_state=rnn_tuple_state,
-            #                                                       sequence_length=tf.shape(
-            #                                                           self.state_input)[:1]
-            #                                                       )
-            # net = tf.reshape(states_series[-1], [-1, self.rnn_steps])
             # ------------------------------------------------------------------------------------
             # lstm_cell = tf.contrib.rnn.BasicLSTMCell(256)
             # c_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.c])
@@ -245,6 +231,11 @@ class ActorCritic:
 
         with tf.variable_scope('critic'):
             critic_net = layers.fully_connected(rnn_net,  # critic_net,
+                                                128,
+                                                weights_initializer=layers.xavier_initializer(),
+                                                biases_initializer=tf.zeros_initializer(),
+                                                activation_fn=tf.nn.relu)
+            critic_net = layers.fully_connected(critic_net,
                                                 1,
                                                 weights_initializer=layers.xavier_initializer(),
                                                 biases_initializer=tf.zeros_initializer(),
@@ -256,6 +247,7 @@ class ActorCritic:
             self.c_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope + '/critic')
         else:
             self.graph_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope)
+        self.ad_update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS, scope=self.scope)
 
     def _build_losses(self):
         """ Loss function """
@@ -317,7 +309,7 @@ class ActorCritic:
             with tf.name_scope('local_grad'):
                 grads = tf.gradients(self.total_loss, self.graph_vars)
                 if self.grad_clip_norm:
-                    grads = [(tf.clip_by_norm(grad, self.grad_clip_norm), var)
+                    grads = [(tf.clip_by_value(grad, -10, 10), var)
                              for grad, var in grads if grad is not None]
 
             # Sync with Global Network
