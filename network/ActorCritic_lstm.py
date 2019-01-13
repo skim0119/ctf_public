@@ -108,10 +108,8 @@ class ActorCritic:
         self.td_target_flat_ = tf.reshape(self.td_target_, (-1,))
         self.advantage_ = tf.placeholder(shape=[None, None], dtype=tf.float32, name='adv_holder')
         self.advantage_flat_ = tf.reshape(self.advantage_, (-1,))
-        self.likelihood_ = tf.placeholder(shape=[None, None], dtype=tf.float32, name='likelihood_holder')
-        self.likelihood_ = tf.reshape(self.likelihood_, (-1,))
-        self.likelihood_cumprod_ = tf.placeholder(shape=[None, None], dtype=tf.float32, name='likelihood_cumprod_holder')
-        self.likelihood_cumprod_ = tf.reshape(self.likelihood_cumprod_, (-1))
+        self.likelihood_ = tf.placeholder(shape=[None], dtype=tf.float32, name='likelihood_holder')
+        self.likelihood_cumprod_ = tf.placeholder(shape=[None], dtype=tf.float32, name='likelihood_cumprod_holder')
 
     def _build_network(self):
         """ Define network
@@ -231,11 +229,6 @@ class ActorCritic:
             # net = tf.reshape(rnn_net, [-1, rnn_hidden_size1])
 
         with tf.variable_scope('critic'):
-            critic_net = layers.fully_connected(rnn_net,  # critic_net,
-                                                128,
-                                                weights_initializer=layers.xavier_initializer(),
-                                                biases_initializer=tf.zeros_initializer(),
-                                                activation_fn=tf.nn.relu)
             critic_net = layers.fully_connected(critic_net,
                                                 1,
                                                 weights_initializer=layers.xavier_initializer(),
@@ -344,6 +337,7 @@ class ActorCritic:
     def feed_backward(self, states, actions, td_targets, advantages, rnn_init_states, seq_lens, retrace_lambda=None):
         if retrace_lambda is not None:
             # Get likelihood of global with states
+            actions_flat = np.reshape(actions, (-1,))
             feed_dict = {self.state_input_: states,
                          self.rnn_init_states_: rnn_init_states,
                          self.seq_len_: seq_lens}
@@ -352,9 +346,8 @@ class ActorCritic:
                                       feed_dict={self.global_network.state_input_: states,
                                                  self.global_network.rnn_init_states_: rnn_init_states,
                                                  self.global_network.seq_len_: seq_lens})
-            target_policy = soft_prob[actions]
-            behavior_policy = current_prob[actions]
-            #target_policy = np.array([p[action] for p, action in zip(soft_prob, actions)])
+            target_policy = np.array([p[action] for p, action in zip(soft_prob, actions_flat)])
+            behavior_policy = np.array([p[action] for p, action in zip(current_prob, actions_flat)])
             likelihood = []
             likelihood_cumprod = []
             running_prob = 1.0
