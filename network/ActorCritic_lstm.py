@@ -92,10 +92,15 @@ class ActorCritic:
         """ Define the placeholders for forward and back propagation """
         # Forward
         self.state_input_ = tf.placeholder(shape=self.in_size, dtype=tf.float32, name='state')
-        self.rnn_init_states_ = tf.placeholder(shape=[self.rnn_num_layers, None, self.rnn_unit_size],
-                                               dtype=tf.float32,
-                                               name="rnn_init_states")
         self.seq_len_ = tf.placeholder(shape=(None,), dtype=tf.int32, name="seq_len")
+        if self.rnn_type == 'GRU':
+            self.rnn_init_states_ = tf.placeholder(shape=[self.rnn_num_layers, None, self.rnn_unit_size],
+                                                   dtype=tf.float32,
+                                                   name="rnn_init_states")
+        else:
+            c_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.c])
+            h_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.h])
+            self.rnn_init_states_ = (c_in, h_in)
 
         # Backward
         self.actions_ = tf.placeholder(shape=[None, None], dtype=tf.int32, name='action_hold')
@@ -154,18 +159,31 @@ class ActorCritic:
             serial_net = layers.fully_connected(serial_net, self.serial_size)
 
             # Recursive Network
-            serial_net = tf.reshape(serial_net, bulk_shape)
+            rnn_net = tf.reshape(serial_net, bulk_shape)
 
-            rnn_cell = rnn.GRUCell(self.rnn_unit_size)
-            rnn_cell = rnn.DropoutWrapper(rnn_cell, output_keep_prob=0.8)
-            rnn_cells = rnn.MultiRNNCell([rnn_cell for _ in range(self.rnn_num_layers)])
-            rnn_tuple_state = tuple(tf.unstack(self.rnn_init_states_, axis=0))  # unstack by rnn layer
-            rnn_net, self.final_state = tf.nn.dynamic_rnn(rnn_cells,
-                                                          serial_net,
-                                                          initial_state=rnn_tuple_state
-                                                          # sequence_length=self.seq_len_
-                                                          )
-            rnn_net = tf.reshape(rnn_net, (-1, self.rnn_unit_size))
+            if self.rnn_type == 'GRU':
+                rnn_cell = rnn.GRUCell(self.rnn_unit_size)
+                rnn_cell = rnn.DropoutWrapper(rnn_cell, output_keep_prob=0.8)
+                rnn_cells = rnn.MultiRNNCell([rnn_cell for _ in range(self.rnn_num_layers)])
+                rnn_tuple_state = tuple(tf.unstack(self.rnn_init_states_, axis=0))  # unstack by rnn layer
+                rnn_net, self.final_state = tf.nn.dynamic_rnn(rnn_cells,
+                                                              rnn_net,
+                                                              initial_state=rnn_tuple_state
+                                                              # sequence_length=self.seq_len_
+                                                              )
+                rnn_net = tf.reshape(rnn_net, (-1, self.rnn_unit_size))
+            else:
+                # Multi RNN Cell is not yet implemented
+                lstm_cell = tf.contrib.rnn.BasicLSTMCell(self.rnn_unit_size)
+                rnn_tuple_state = tf.contrib.rnn.LSTMStateTuple(c_in, h_in)
+                rnn_net, lstm_state = tf.nn.dynamic_rnn(lstm_cell,
+                                                        rnn_net,
+                                                        initial_state=rnn_tuple_state,
+                                                        sequence_length=self.seq_len_,
+                                                        )
+                lstm_c, lstm_h = lstm_state
+                self.final_state = (lstm_c[:1, :], lstm_h[:1, :])
+                rnn_net = tf.reshape(rnn_net, (-1, self.rnn_unit_size))
 
             self.logit = layers.fully_connected(rnn_net,
                                                 self.action_size,
@@ -378,5 +396,10 @@ class ActorCritic:
         self.sess.run(self.pull_ops)
 
     def get_lstm_initial(self, batch_size=1):
-        init_state = np.zeros((self.rnn_num_layers, batch_size, self.rnn_unit_size))  # 1 for gru state number
+        if self.rnn_type == 'GRU':
+            init_state = np.zeros((self.rnn_num_layers, batch_size, self.rnn_unit_size))  # 1 for gru state number
+        else:
+            c_init = np.zeros((1, lstm_cell.state_size.c), np.float32)
+            h_init = np.zeros((1, lstm_cell.state_size.h), np.float32)
+            init_state = [c_init, h_init]
         return init_state
