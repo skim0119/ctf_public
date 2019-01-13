@@ -165,6 +165,7 @@ class ActorCritic:
                                                           initial_state=rnn_tuple_state
                                                           # sequence_length=self.seq_len_
                                                           )
+            self.final_state = self.final_state[:1, :]
             rnn_net = tf.reshape(rnn_net, (-1, self.rnn_unit_size))
 
             self.logit = layers.fully_connected(rnn_net,
