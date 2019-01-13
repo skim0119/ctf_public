@@ -375,7 +375,7 @@ class ActorCritic:
             self.td_target_: td_targets,
             self.advantage_: advantages,
             self.rnn_init_states_: rnn_init_states,
-            self.seq_len_: seq_lens
+            self.seq_len_: seq_lens,
             self.likelihood_: likelihood,
             self.likelihood_cumprod_: likelihood_cumprod
         }
