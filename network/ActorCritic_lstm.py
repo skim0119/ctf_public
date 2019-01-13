@@ -108,8 +108,10 @@ class ActorCritic:
         self.td_target_flat_ = tf.reshape(self.td_target_, (-1,))
         self.advantage_ = tf.placeholder(shape=[None, None], dtype=tf.float32, name='adv_holder')
         self.advantage_flat_ = tf.reshape(self.advantage_, (-1,))
-        # self.likelihood_ = tf.placeholder(shape[None], dtype=tf.float32, name='likelihood_holder')
-        # self.likelihood_cumprod_ = tf.placeholder(shape[None], dtype=tf.float32, name='likelihood_cumprod_holder')
+        self.likelihood_ = tf.placeholder(shape=[None, None], dtype=tf.float32, name='likelihood_holder')
+        self.likelihood_ = tf.reshape(self.likelihood_, (-1,))
+        self.likelihood_cumprod_ = tf.placeholder(shape=[None, None], dtype=tf.float32, name='likelihood_cumprod_holder')
+        self.likelihood_cumprod_ = tf.reshape(self.likelihood_cumprod_, (-1))
 
     def _build_network(self):
         """ Define network
@@ -135,26 +137,25 @@ class ActorCritic:
             bulk_shape = tf.stack([batch_size, seq_length, self.serial_size])
 
             # Convolution
-            # net = tf.reshape(self.state_input_, [-1] + self.in_size[-3:])
-            # net = layers.conv2d(net, 32, [5, 5],
-            #                     activation_fn=tf.nn.relu,
-            #                    weights_initializer=layers.xavier_initializer_conv2d(),
-            #                    biases_initializer=tf.zeros_initializer(),
-            #                    padding='SAME')
-            #net = layers.max_pool2d(net, [2, 2])
-            # net = layers.conv2d(net, 64, [3, 3],
-            #                    activation_fn=tf.nn.relu,
-            #                    weights_initializer=layers.xavier_initializer_conv2d(),
-            #                    biases_initializer=tf.zeros_initializer(),
-            #                    padding='SAME')
-            #net = layers.max_pool2d(net, [2, 2])
-            # net = layers.conv2d(net, 64, [2, 2],
-            #                    activation_fn=tf.nn.relu,
-            #                    weights_initializer=layers.xavier_initializer_conv2d(),
-            #                    biases_initializer=tf.zeros_initializer(),
-            #                    padding='SAME')
-            #serial_net = layers.flatten(net)
-            serial_net = tf.reshape(self.state_input_, [batch_size*seq_length, 3971])
+            net = tf.reshape(self.state_input_, [-1] + self.in_size[-3:])
+            net = layers.conv2d(net, 32, [5, 5],
+                                activation_fn=tf.nn.relu,
+                                weights_initializer=layers.xavier_initializer_conv2d(),
+                                biases_initializer=tf.zeros_initializer(),
+                                padding='SAME')
+            net = layers.max_pool2d(net, [2, 2])
+            net = layers.conv2d(net, 64, [3, 3],
+                                activation_fn=tf.nn.relu,
+                                weights_initializer=layers.xavier_initializer_conv2d(),
+                                biases_initializer=tf.zeros_initializer(),
+                                padding='SAME')
+            net = layers.max_pool2d(net, [2, 2])
+            net = layers.conv2d(net, 64, [2, 2],
+                                activation_fn=tf.nn.relu,
+                                weights_initializer=layers.xavier_initializer_conv2d(),
+                                biases_initializer=tf.zeros_initializer(),
+                                padding='SAME')
+            serial_net = layers.flatten(net)
             serial_net = layers.fully_connected(serial_net, self.serial_size)
 
             # Recursive Network
@@ -263,8 +264,8 @@ class ActorCritic:
 
             # Critic (value) Loss
             td_error = self.td_target_flat_ - self.critic
-            # self.critic_loss = tf.reduce_mean(tf.square(td_error*self.mask),  # * self.likelihood_cumprod_),
-            self.critic_loss = tf.reduce_mean(tf.square(td_error),  # * self.likelihood_cumprod_),
+            # self.critic_loss = tf.reduce_mean(tf.square(td_error*self.mask),  # * self.likelihood_cumprod_flat_),
+            self.critic_loss = tf.reduce_mean(tf.square(td_error) * self.likelihood_cumprod_,
                                               name='critic_loss')
 
             # Actor Loss
@@ -275,7 +276,7 @@ class ActorCritic:
             # self.actor_loss = tf.reduce_mean(obj_func * self.advantage_, name='actor_loss')
 
             obj_func = tf.log(tf.reduce_sum(self.action * self.actions_OH, 1))
-            exp_v = obj_func * self.advantage_flat_
+            exp_v = obj_func * self.advantage_flat_ * self.likelihood_
             self.actor_loss = tf.reduce_mean(-exp_v, name='actor_loss') - self.entropy_beta * self.entropy
 
             # Total Loss
@@ -340,7 +341,34 @@ class ActorCritic:
         action = [np.random.choice(self.action_size, p=prob / sum(prob)) for prob in action_prob]
         return action, critic.tolist(), final_state
 
-    def feed_backward(self, states, actions, td_targets, advantages, rnn_init_states, seq_lens):
+    def feed_backward(self, states, actions, td_targets, advantages, rnn_init_states, seq_lens, retrace_lambda=None):
+        if retrace_lambda is not None:
+            # Get likelihood of global with states
+            feed_dict = {self.state_input_: states,
+                         self.rnn_init_states_: rnn_init_states,
+                         self.seq_len_: seq_lens}
+            current_prob = self.sess.run(self.action, feed_dict)
+            soft_prob = self.sess.run(self.global_network.action,
+                                      feed_dict={self.global_network.state_input_: states,
+                                                 self.global_network.rnn_init_states_: rnn_init_states,
+                                                 self.global_network.seq_len_: seq_lens})
+            target_policy = soft_prob[actions]
+            behavior_policy = current_prob[actions]
+            #target_policy = np.array([p[action] for p, action in zip(soft_prob, actions)])
+            likelihood = []
+            likelihood_cumprod = []
+            running_prob = 1.0
+            for pi, beta in zip(target_policy, behavior_policy):
+                ratio = retrace_lambda * min(1.0, pi / beta)
+                running_prob *= ratio
+                likelihood.append(ratio)
+                likelihood_cumprod.append(running_prob)
+            likelihood = np.array(likelihood)
+            likelihood_cumprod = np.array(likelihood_cumprod)
+        else:
+            likelihood = np.ones_like(advantages)
+            likelihood_cumprod = np.ones_like(advantages)
+
         feed_dict = {
             self.state_input_: states,
             self.actions_: actions,
@@ -348,6 +376,8 @@ class ActorCritic:
             self.advantage_: advantages,
             self.rnn_init_states_: rnn_init_states,
             self.seq_len_: seq_lens
+            self.likelihood_: likelihood,
+            self.likelihood_cumprod_: likelihood_cumprod
         }
         self.sess.run(self.update_ops, feed_dict)
         al, cl, etrpy = self.sess.run([self.actor_loss, self.critic_loss, self.entropy], feed_dict)
