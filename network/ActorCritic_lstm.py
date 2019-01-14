@@ -146,15 +146,15 @@ class ActorCritic:
             #                    biases_initializer=tf.zeros_initializer(),
             #                    padding='SAME')
             #net = layers.max_pool2d(net, [2, 2])
-            net = layers.conv2d(net, 64, [3, 3],
-                                weights_initializer=layers.xavier_initializer_conv2d(),
-                                biases_initializer=tf.zeros_initializer(),
-                                padding='SAME')
-            net = layers.max_pool2d(net, [2, 2])
-            net = layers.conv2d(net, 64, [2, 2],
-                                weights_initializer=layers.xavier_initializer_conv2d(),
-                                biases_initializer=tf.zeros_initializer(),
-                                padding='SAME')
+            # net = layers.conv2d(net, 64, [3, 3],
+            #                    weights_initializer=layers.xavier_initializer_conv2d(),
+            #                    biases_initializer=tf.zeros_initializer(),
+            #                    padding='SAME')
+            #net = layers.max_pool2d(net, [2, 2])
+            # net = layers.conv2d(net, 64, [2, 2],
+            #                    weights_initializer=layers.xavier_initializer_conv2d(),
+            #                    biases_initializer=tf.zeros_initializer(),
+            #                    padding='SAME')
             serial_net = layers.flatten(net)
             serial_net = layers.fully_connected(serial_net, self.serial_size)
 
