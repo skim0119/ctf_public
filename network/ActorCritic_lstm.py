@@ -98,9 +98,7 @@ class ActorCritic:
                                                    dtype=tf.float32,
                                                    name="rnn_init_states")
         else:
-            c_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.c])
-            h_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.h])
-            self.rnn_init_states_ = (c_in, h_in)
+            pass
 
         # Backward
         self.actions_ = tf.placeholder(shape=[None, None], dtype=tf.int32, name='action_hold')
@@ -109,12 +107,14 @@ class ActorCritic:
         # self.reward_ = tf.placeholder(shape=[None, None], dtype=tf.float32, name='reward')
         # self.rewards_flatten = tf.reshape(self.reward_, (-1,))
 
-        self.td_target_ = tf.placeholder(shape=[None, None], dtype=tf.float32, name='td_target_holder')
+        self.td_target_ = tf.placeholder(
+            shape=[None, None], dtype=tf.float32, name='td_target_holder')
         self.td_target_flat_ = tf.reshape(self.td_target_, (-1,))
         self.advantage_ = tf.placeholder(shape=[None, None], dtype=tf.float32, name='adv_holder')
         self.advantage_flat_ = tf.reshape(self.advantage_, (-1,))
         self.likelihood_ = tf.placeholder(shape=[None], dtype=tf.float32, name='likelihood_holder')
-        self.likelihood_cumprod_ = tf.placeholder(shape=[None], dtype=tf.float32, name='likelihood_cumprod_holder')
+        self.likelihood_cumprod_ = tf.placeholder(
+            shape=[None], dtype=tf.float32, name='likelihood_cumprod_holder')
 
     def _build_network(self):
         """ Define network
@@ -146,15 +146,15 @@ class ActorCritic:
             #                    biases_initializer=tf.zeros_initializer(),
             #                    padding='SAME')
             #net = layers.max_pool2d(net, [2, 2])
-            # net = layers.conv2d(net, 64, [3, 3],
-            #                    weights_initializer=layers.xavier_initializer_conv2d(),
-            #                    biases_initializer=tf.zeros_initializer(),
-            #                    padding='SAME')
-            #net = layers.max_pool2d(net, [2, 2])
-            # net = layers.conv2d(net, 64, [2, 2],
-            #                    weights_initializer=layers.xavier_initializer_conv2d(),
-            #                    biases_initializer=tf.zeros_initializer(),
-            #                    padding='SAME')
+            net = layers.conv2d(net, 64, [3, 3],
+                                weights_initializer=layers.xavier_initializer_conv2d(),
+                                biases_initializer=tf.zeros_initializer(),
+                                padding='SAME')
+            net = layers.max_pool2d(net, [2, 2])
+            net = layers.conv2d(net, 64, [2, 2],
+                                weights_initializer=layers.xavier_initializer_conv2d(),
+                                biases_initializer=tf.zeros_initializer(),
+                                padding='SAME')
             serial_net = layers.flatten(net)
             serial_net = layers.fully_connected(serial_net, self.serial_size)
 
@@ -165,7 +165,8 @@ class ActorCritic:
                 rnn_cell = rnn.GRUCell(self.rnn_unit_size)
                 rnn_cell = rnn.DropoutWrapper(rnn_cell, output_keep_prob=0.8)
                 rnn_cells = rnn.MultiRNNCell([rnn_cell for _ in range(self.rnn_num_layers)])
-                rnn_tuple_state = tuple(tf.unstack(self.rnn_init_states_, axis=0))  # unstack by rnn layer
+                rnn_tuple_state = tuple(tf.unstack(self.rnn_init_states_,
+                                                   axis=0))  # unstack by rnn layer
                 rnn_net, self.final_state = tf.nn.dynamic_rnn(rnn_cells,
                                                               rnn_net,
                                                               initial_state=rnn_tuple_state
@@ -174,9 +175,12 @@ class ActorCritic:
                 rnn_net = tf.reshape(rnn_net, (-1, self.rnn_unit_size))
             else:
                 # Multi RNN Cell is not yet implemented
-                lstm_cell = tf.contrib.rnn.BasicLSTMCell(self.rnn_unit_size)
+                self.lstm_cell = tf.contrib.rnn.BasicLSTMCell(self.rnn_unit_size)
+                c_in = tf.placeholder(tf.float32, [1, self.lstm_cell.state_size.c])
+                h_in = tf.placeholder(tf.float32, [1, self.lstm_cell.state_size.h])
+                self.rnn_init_states_ = (c_in, h_in)
                 rnn_tuple_state = tf.contrib.rnn.LSTMStateTuple(c_in, h_in)
-                rnn_net, lstm_state = tf.nn.dynamic_rnn(lstm_cell,
+                rnn_net, lstm_state = tf.nn.dynamic_rnn(self.lstm_cell,
                                                         rnn_net,
                                                         initial_state=rnn_tuple_state,
                                                         sequence_length=self.seq_len_,
@@ -193,38 +197,6 @@ class ActorCritic:
                                                 )
             self.action = tf.nn.softmax(self.logit, name='action')
 
-            # ------------------------------------------------------------------------------------
-            # lstm_cell = tf.contrib.rnn.BasicLSTMCell(256)
-            # c_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.c])
-            # h_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.h])
-            # c_init = np.zeros((1, lstm_cell.state_size.c), np.float32)
-            # h_init = np.zeros((1, lstm_cell.state_size.h), np.float32)
-            # self.state_init = [c_init, h_init]
-            # self.state_in = (c_in, h_in)
-            # rnn_in = tf.expand_dims(hidden, [0])
-            # step_size = tf.shape(self.imageIn)[:1]
-            # state_in = tf.contrib.rnn.LSTMStateTuple(c_in, h_in)
-            # lstm_outputs, lstm_state = tf.nn.dynamic_rnn(
-            #                                        lstm_cell,
-            #                                        rnn_in,
-            #                                        initial_state=state_in,
-            #                                        sequence_length=step_size,
-            #                                        time_major=False
-            #                                        )
-            # lstm_c, lstm_h = lstm_state
-            # self.state_out = (lstm_c[:1, :], lstm_h[:1, :])
-            # rnn_out = tf.reshape(lstm_outputs, [-1, 256])
-            # ------------------------------------------------------------------------------------
-            # self.trainLength = tf.placeholder(dtype=tf.int32)
-            # self.batch_size = tf.placeholder(dtype=tf.int32,shape=[])
-            # self.convFlat = tf.reshape(slim.flatten(self.conv4),[self.batch_size,self.trainLength,h_size])
-            # self.state_in = rnn_cell.zero_state(self.batch_size, tf.float32)
-            # self.rnn,self.rnn_state = tf.nn.dynamic_rnn(inputs=self.convFlat,
-            #                                             cell=rnn_cell,
-            #                                             dtype=tf.float32,
-            #                                             initial_state=self.state_in,
-            #                                             scope=myScope+'_rnn')
-            # self.rnn = tf.reshape(self.rnn,shape=[-1,h_size])
             # ------------------------------------------------------------------------------------
             # lstm_cell = tf.nn.rnn_cell.LSTMCell(rnn_hidden_size1)
             # self.rnn_serial_length = tf.placeholder(tf.int32)
@@ -252,8 +224,10 @@ class ActorCritic:
             self.critic = tf.reshape(critic_net, [-1, ])  # column to row
 
         if self.separate_train:
-            self.a_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope + '/actor')
-            self.c_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope + '/critic')
+            self.a_vars = tf.get_collection(
+                tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope + '/actor')
+            self.c_vars = tf.get_collection(
+                tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope + '/critic')
         else:
             self.graph_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope)
         self.ad_update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS, scope=self.scope)
@@ -285,7 +259,8 @@ class ActorCritic:
 
             obj_func = tf.log(tf.reduce_sum(self.action * self.actions_OH, 1))
             exp_v = obj_func * self.advantage_flat_ * self.likelihood_
-            self.actor_loss = tf.reduce_mean(-exp_v, name='actor_loss') - self.entropy_beta * self.entropy
+            self.actor_loss = tf.reduce_mean(-exp_v, name='actor_loss') - \
+                self.entropy_beta * self.entropy
 
             # Total Loss
             self.total_loss = self.critic_beta * self.critic_loss + self.actor_loss
@@ -297,8 +272,10 @@ class ActorCritic:
                 self.a_grads = tf.gradients(self.actor_loss, self.a_vars)
                 self.c_grads = tf.gradients(self.critic_loss, self.c_vars)
                 if self.grad_clip_norm:
-                    self.a_grads = [tf.clip_by_value(grad, -10, 10) for grad in self.a_grads if grad is not None]
-                    self.c_grads = [tf.clip_by_value(grad, -10, 10) for grad in self.c_grads if grad is not None]
+                    self.a_grads = [tf.clip_by_value(grad, -10, 10)
+                                    for grad in self.a_grads if grad is not None]
+                    self.c_grads = [tf.clip_by_value(grad, -10, 10)
+                                    for grad in self.c_grads if grad is not None]
 
             # Sync with Global Network
             with tf.name_scope('sync'):
@@ -311,8 +288,10 @@ class ActorCritic:
                     self.pull_ops = tf.group(pull_a_vars_op, pull_c_vars_op)
                 # Push local weights to global weights
                 with tf.name_scope('push'):
-                    update_a_op = self.global_network.actor_optimizer.apply_gradients(zip(self.a_grads, self.global_network.a_vars))
-                    update_c_op = self.global_network.critic_optimizer.apply_gradients(zip(self.c_grads, self.global_network.c_vars))
+                    update_a_op = self.global_network.actor_optimizer.apply_gradients(
+                        zip(self.a_grads, self.global_network.a_vars))
+                    update_c_op = self.global_network.critic_optimizer.apply_gradients(
+                        zip(self.c_grads, self.global_network.c_vars))
                     self.update_ops = tf.group(update_a_op, update_c_op)
         else:
             with tf.name_scope('local_grad'):
@@ -397,9 +376,10 @@ class ActorCritic:
 
     def get_lstm_initial(self, batch_size=1):
         if self.rnn_type == 'GRU':
-            init_state = np.zeros((self.rnn_num_layers, batch_size, self.rnn_unit_size))  # 1 for gru state number
+            # 1 for gru state number
+            init_state = np.zeros((self.rnn_num_layers, batch_size, self.rnn_unit_size))
         else:
-            c_init = np.zeros((1, lstm_cell.state_size.c), np.float32)
-            h_init = np.zeros((1, lstm_cell.state_size.h), np.float32)
+            c_init = np.zeros((1, self.lstm_cell.state_size.c), np.float32)
+            h_init = np.zeros((1, self.lstm_cell.state_size.h), np.float32)
             init_state = [c_init, h_init]
         return init_state
