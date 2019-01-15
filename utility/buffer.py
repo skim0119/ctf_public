@@ -87,12 +87,12 @@ class Trajectory:
         #    self.buffer[i].append(element)
         #    if self.length == self.length_max:
         #        self.buffer[i] = self.buffer[i][1:]
-        self.length = min(self.length+1, self.length_max)
+        self.length = min(self.length + 1, self.length_max)
 
     def trim(self, serial_length):
         if self.length < serial_length:
             return None
-        s_, e_ = self.length-serial_length, self.length
+        s_, e_ = self.length - serial_length, self.length
         traj_list = []
         while s_ >= 0:
             new_traj = Trajectory(depth=self.depth, length_max=self.length_max)
@@ -193,11 +193,24 @@ class Trajectory_buffer:
         """sample
 
         Return in (None,None)+shape
+        All returns are in tensor format
 
         :param flush: True - Emtpy the buffer after sampling
         """
         if flush:
-            ret = tuple(np.array(b) for b in self.buffer)
+            # Find longest length sequence
+            length = 0
+            for batch in self.buffer[1]:  # 1 : action array
+                length = max(length, len(batch))
+            for buf in self.buffer:
+                for idx, batch in enumerate(buf):
+                    if len(batch) < length:
+                        extra_length = length - len(batch)
+                        shape = [extra_length] + batch.shape[1:]
+                        buf[idx] = np.concatenate([buf[idx], np.zeros(shape)])
+                    else:
+                        buf[idx] = np.array(buf[idx])
+            ret = tuple(self.buffer)
             self.buffer = [[] for _ in range(self.depth)]
         else:
             raise NotImplementedError
