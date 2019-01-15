@@ -202,15 +202,15 @@ class Trajectory_buffer:
             length = 0
             for batch in self.buffer[1]:  # 1 : action array
                 length = max(length, len(batch))
-            for buf in self.buffer:
+            for bid, buf in enumerate(self.buffer):
                 for idx, batch in enumerate(buf):
                     batch = np.array(batch)
                     if len(batch) < length:
                         extra_length = length - len(batch)
-                        shape = [extra_length] + batch.shape[1:]
+                        shape = [extra_length] + list(batch.shape[1:])
                         batch = np.append(batch, np.zeros(shape), axis=0)
-                    buf[idx] = batch
-            ret = tuple(self.buffer)
+                    self.buffer[bid][idx] = batch
+            ret = tuple(np.array(b) for b in self.buffer)
             self.buffer = [[] for _ in range(self.depth)]
         else:
             raise NotImplementedError
