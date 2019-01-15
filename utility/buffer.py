@@ -92,19 +92,14 @@ class Trajectory:
     def trim(self, serial_length):
         traj_list = []
         s_, e_ = self.length - serial_length, self.length
-        while s_ >= 0:
+        while e_ > 0:
             new_traj = Trajectory(depth=self.depth, length_max=self.length_max)
-            new_buffer = [buf[s_:e_] for buf in self.buffer]
+            new_buffer = [buf[max(s_,0):e_] for buf in self.buffer]
             new_traj.buffer = new_buffer
             new_traj.length = len(new_traj.buffer)
             traj_list.append(new_traj)
             s_ -= serial_length
             e_ -= serial_length
-        new_traj = Trajectory(depth=self.depth, length_max=self.length_max)
-        new_buffer = [buf[:e_] for buf in self.buffer]
-        new_traj.buffer = new_buffer
-        new_traj.length = len(new_traj.buffer)
-        traj_list.append(new_traj)
         return traj_list
 
 
