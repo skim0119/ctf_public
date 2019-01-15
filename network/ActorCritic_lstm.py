@@ -223,7 +223,7 @@ class ActorCritic:
                 self.mask_flat = tf.reshape(self.mask, (-1,))
 
             # Entropy
-            self.entropy = -tf.reduce_mean(self.action * tf.log(self.action) * self.mask_flat, name='entropy')
+            self.entropy = -tf.reduce_mean(self.action * tf.log(self.action), name='entropy')
 
             # Critic (value) Loss
             td_error = self.td_target_flat_ - self.critic
