@@ -104,35 +104,18 @@ class ActorCritic:
         self.actions_ = tf.placeholder(shape=[None, None], dtype=tf.int32, name='action_hold')
         self.actions_flat_ = tf.reshape(self.actions_, (-1,))
         self.actions_OH = tf.one_hot(self.actions_flat_, self.action_size)
-        # self.reward_ = tf.placeholder(shape=[None, None], dtype=tf.float32, name='reward')
-        # self.rewards_flatten = tf.reshape(self.reward_, (-1,))
 
-        self.td_target_ = tf.placeholder(
-            shape=[None, None], dtype=tf.float32, name='td_target_holder')
+        self.td_target_ = tf.placeholder(shape=[None, None], dtype=tf.float32, name='td_target_holder')
         self.td_target_flat_ = tf.reshape(self.td_target_, (-1,))
         self.advantage_ = tf.placeholder(shape=[None, None], dtype=tf.float32, name='adv_holder')
         self.advantage_flat_ = tf.reshape(self.advantage_, (-1,))
         self.likelihood_ = tf.placeholder(shape=[None], dtype=tf.float32, name='likelihood_holder')
-        self.likelihood_cumprod_ = tf.placeholder(
-            shape=[None], dtype=tf.float32, name='likelihood_cumprod_holder')
+        self.likelihood_cumprod_ = tf.placeholder(shape=[None], dtype=tf.float32, name='likelihood_cumprod_holder')
 
     def _build_network(self):
         """ Define network
-
         It includes convolution network, lstm network, and fully-connected networks
         Separate branch for actor and value
-
-        Forward Pass :
-            input - [batch_size, sequence_length, width, height, channel]
-            reshape - [full_size, width, height, channel]
-            <<CNN>> + <<pooling>>
-            <<FC>> - [full_size, serial_size]
-            reshape - [batch_size, sequence_length, serial_size]
-            <<RNN>>
-            reshape - [batch_size, rnn_unit_size]
-
-            <<FC>> - [batch_size, acion_space]      |     <<FC>> - [batch_size, 1]
-
         """
         with tf.variable_scope('actor'):
             # Parameter
@@ -145,12 +128,12 @@ class ActorCritic:
             #                    weights_initializer=layers.xavier_initializer_conv2d(),
             #                    biases_initializer=tf.zeros_initializer(),
             #                    padding='SAME')
-            #net = layers.max_pool2d(net, [2, 2])
+            # net = layers.max_pool2d(net, [2, 2])
             # net = layers.conv2d(net, 64, [3, 3],
             #                    weights_initializer=layers.xavier_initializer_conv2d(),
             #                    biases_initializer=tf.zeros_initializer(),
             #                    padding='SAME')
-            #net = layers.max_pool2d(net, [2, 2])
+            # net = layers.max_pool2d(net, [2, 2])
             # net = layers.conv2d(net, 64, [2, 2],
             #                    weights_initializer=layers.xavier_initializer_conv2d(),
             #                    biases_initializer=tf.zeros_initializer(),
@@ -234,31 +217,22 @@ class ActorCritic:
 
     def _build_losses(self):
         """ Loss function """
-        with tf.name_scope('train'), tf.device('/gpu:0'):
-            # with tf.name_scope('masker'):
-            #    num_step = tf.shape(self.state_input_)[1]
-            #    self.mask = tf.sequence_mask(self.seq_len_, num_step)
-            #    self.mask = tf.reshape(tf.cast(self.mask, tf.float32), (-1,))
+        with tf.name_scope('train'):
+            with tf.name_scope('masker'):
+                self.mask = tf.sequence_mask(lengths=self.seq_len_, dtype=tf.float32)
+                self.mask_flat = tf.reshape(self.mask, (-1,))
 
             # Entropy
-            # self.entropy = tf.multiply(self.entropy, self.mask)
-            self.entropy = -tf.reduce_mean(self.action * tf.log(self.action), name='entropy')
+            self.entropy = -tf.reduce_mean(self.action * tf.log(self.action) * self.mask_flat, name='entropy')
 
             # Critic (value) Loss
             td_error = self.td_target_flat_ - self.critic
-            # self.critic_loss = tf.reduce_mean(tf.square(td_error*self.mask),  # * self.likelihood_cumprod_flat_),
-            self.critic_loss = tf.reduce_mean(tf.square(td_error) * self.likelihood_cumprod_,
+            self.critic_loss = tf.reduce_mean(tf.square(td_error * self.mask_flat) * self.likelihood_cumprod,
                                               name='critic_loss')
 
             # Actor Loss
-            # obj_func = tf.nn.sparse_softmax_cross_entropy_with_logits(
-            #    logits=self.logit,
-            #    labels=self.actions_)
-            # obj_func = tf.multiply(obj_func, self.mask)
-            # self.actor_loss = tf.reduce_mean(obj_func * self.advantage_, name='actor_loss')
-
             obj_func = tf.log(tf.reduce_sum(self.action * self.actions_OH, 1))
-            exp_v = obj_func * self.advantage_flat_ * self.likelihood_
+            exp_v = obj_func * self.advantage_flat_ * self.likelihood_ * self.mask_flat
             self.actor_loss = tf.reduce_mean(-exp_v, name='actor_loss') - \
                 self.entropy_beta * self.entropy
 
