@@ -204,12 +204,12 @@ class Trajectory_buffer:
                 length = max(length, len(batch))
             for buf in self.buffer:
                 for idx, batch in enumerate(buf):
+                    batch = np.array(batch)
                     if len(batch) < length:
                         extra_length = length - len(batch)
                         shape = [extra_length] + batch.shape[1:]
-                        buf[idx] = np.concatenate([buf[idx], np.zeros(shape)])
-                    else:
-                        buf[idx] = np.array(buf[idx])
+                        batch = np.append(batch, np.zeros(shape), axis=0)
+                    buf[idx] = batch
             ret = tuple(self.buffer)
             self.buffer = [[] for _ in range(self.depth)]
         else:
