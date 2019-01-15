@@ -105,7 +105,6 @@ class Trajectory:
         new_traj.buffer = new_buffer
         new_traj.length = len(new_traj.buffer)
         traj_list.append(new_traj)
-        traj_list.reverse()
         return traj_list
 
 
