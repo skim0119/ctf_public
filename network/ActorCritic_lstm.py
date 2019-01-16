@@ -212,6 +212,7 @@ class ActorCritic:
 
     def _build_losses(self):
         """ Loss function """
+        ppo_epsilon = 0.01
         with tf.name_scope('train'):
             with tf.name_scope('masker'):
                 self.mask = tf.sequence_mask(lengths=self.seq_len_, dtype=tf.float32)
@@ -222,13 +223,17 @@ class ActorCritic:
 
             # Critic (value) Loss
             td_error = self.td_target_flat_ - self.critic
-            self.critic_loss = tf.reduce_mean(tf.square(td_error * self.mask_flat) * self.likelihood_cumprod_,
+            self.critic_loss = tf.reduce_mean(tf.square(td_error * self.mask_flat),  # * self.likelihood_cumprod_,
                                               name='critic_loss')
 
             # Actor Loss
-            obj_func = tf.log(tf.reduce_sum(self.action * self.actions_OH, 1))
-            exp_v = obj_func * self.advantage_flat_ * self.likelihood_ * self.mask_flat
-            self.actor_loss = tf.reduce_mean(-exp_v, name='actor_loss') - self.entropy_beta * self.entropy
+            # ppo
+            exp_v_a = self.likelihood_ * self.advantage_flat_ * self.mask_flat
+            exp_v_b = tf.clip_by_value(self.likelihood_, 1 - ppo_epsilon, 1 + ppo_epsilon) * self.advantage_flat_ * self.mask_flat
+            self.actor_loss = -tf.reduce_mean(tf.minimum(exp_v_a, exp_v_b), name='actor_loss') - self.entropy_beta * self.entropy
+            # obj_func = tf.log(tf.reduce_sum(self.action * self.actions_OH, 1))
+            # exp_v = obj_func * self.advantage_flat_ * self.likelihood_ * self.mask_flat
+            # self.actor_loss = -tf.reduce_mean(exp_v, name='actor_loss') - self.entropy_beta * self.entropy
 
             # Total Loss
             self.total_loss = self.critic_beta * self.critic_loss + self.actor_loss
@@ -314,7 +319,7 @@ class ActorCritic:
             likelihood_cumprod = []
             running_prob = 1.0
             for pi, beta in zip(target_policy, behavior_policy):
-                ratio = retrace_lambda * min(1.0, pi / beta)
+                ratio = retrace_lambda * min(1.0, pi / (beta + 1e-10))
                 running_prob *= ratio
                 likelihood.append(ratio)
                 likelihood_cumprod.append(running_prob)
