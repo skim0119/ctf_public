@@ -83,13 +83,11 @@ class Trajectory:
             buf.append(element)
             if self.length == self.length_max:
                 buf = buf[1:]
-        # for i, element in enumerate(mdp_tup):
-        #    self.buffer[i].append(element)
-        #    if self.length == self.length_max:
-        #        self.buffer[i] = self.buffer[i][1:]
         self.length = min(self.length + 1, self.length_max)
 
-    def trim(self, serial_length):
+    def trim(self, serial_length=None):
+        if serial_length is None:
+            return self
         traj_list = []
         s_, e_ = self.length - serial_length, self.length
         while e_ > 0:
@@ -179,12 +177,7 @@ class Trajectory_buffer:
 
     def extend(self, trajs):
         for traj in trajs:
-            for i, elem in enumerate(traj):
-                self.buffer[i].append(elem)
-        self.buffer_size += len(trajs)
-        # if len(self.buffer) > self.capacity:
-        #     self.buffer = self.buffer[-self.capacity:]
-        #     self.buffer_size = len(self.buffer)
+            self.append(traj)
 
     def sample(self, flush=True):
         """sample
