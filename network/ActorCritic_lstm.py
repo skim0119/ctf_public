@@ -153,7 +153,7 @@ class ActorCritic:
                 rnn_net, self.final_state = tf.nn.dynamic_rnn(rnn_cells,
                                                               rnn_net,
                                                               initial_state=rnn_tuple_state
-                                                              # sequence_length=self.seq_len_
+                                                              sequence_length=self.seq_len_
                                                               )
                 rnn_net = tf.reshape(rnn_net, (-1, self.rnn_unit_size))
             else:
@@ -207,10 +207,8 @@ class ActorCritic:
             self.critic = tf.reshape(critic_net, [-1, ])  # column to row
 
         if self.separate_train:
-            self.a_vars = tf.get_collection(
-                tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope + '/actor')
-            self.c_vars = tf.get_collection(
-                tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope + '/critic')
+            self.a_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope + '/actor')
+            self.c_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope + '/critic')
         else:
             self.graph_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope)
         self.ad_update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS, scope=self.scope)
