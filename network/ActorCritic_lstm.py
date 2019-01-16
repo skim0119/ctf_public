@@ -152,7 +152,7 @@ class ActorCritic:
                                                    axis=0))  # unstack by rnn layer
                 rnn_net, self.final_state = tf.nn.dynamic_rnn(rnn_cells,
                                                               rnn_net,
-                                                              initial_state=rnn_tuple_state
+                                                              initial_state=rnn_tuple_state,
                                                               sequence_length=self.seq_len_
                                                               )
                 rnn_net = tf.reshape(rnn_net, (-1, self.rnn_unit_size))
