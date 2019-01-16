@@ -124,20 +124,20 @@ class ActorCritic:
 
             # Convolution
             net = tf.reshape(self.state_input_, [-1] + self.in_size[-3:])
-            # net = layers.conv2d(net, 32, [5, 5],
-            #                    weights_initializer=layers.xavier_initializer_conv2d(),
-            #                    biases_initializer=tf.zeros_initializer(),
-            #                    padding='SAME')
-            # net = layers.max_pool2d(net, [2, 2])
-            # net = layers.conv2d(net, 64, [3, 3],
-            #                    weights_initializer=layers.xavier_initializer_conv2d(),
-            #                    biases_initializer=tf.zeros_initializer(),
-            #                    padding='SAME')
-            # net = layers.max_pool2d(net, [2, 2])
-            # net = layers.conv2d(net, 64, [2, 2],
-            #                    weights_initializer=layers.xavier_initializer_conv2d(),
-            #                    biases_initializer=tf.zeros_initializer(),
-            #                    padding='SAME')
+            #et = layers.conv2d(net, 32, [5, 5],
+            #                   weights_initializer=layers.xavier_initializer_conv2d(),
+            #                   biases_initializer=tf.zeros_initializer(),
+            #                   padding='SAME')
+            #net = layers.max_pool2d(net, [2, 2])
+            net = layers.conv2d(net, 32, [3, 3],
+                                weights_initializer=layers.xavier_initializer_conv2d(),
+                                biases_initializer=tf.zeros_initializer(),
+                                padding='SAME')
+            net = layers.max_pool2d(net, [2, 2])
+            net = layers.conv2d(net, 64, [2, 2],
+                                weights_initializer=layers.xavier_initializer_conv2d(),
+                                biases_initializer=tf.zeros_initializer(),
+                                padding='SAME')
             serial_net = layers.flatten(net)
             serial_net = layers.fully_connected(serial_net, self.serial_size)
 
@@ -148,8 +148,7 @@ class ActorCritic:
                 rnn_cell = rnn.GRUCell(self.rnn_unit_size)
                 rnn_cell = rnn.DropoutWrapper(rnn_cell, output_keep_prob=0.8)
                 rnn_cells = rnn.MultiRNNCell([rnn_cell for _ in range(self.rnn_num_layers)])
-                rnn_tuple_state = tuple(tf.unstack(self.rnn_init_states_,
-                                                   axis=0))  # unstack by rnn layer
+                rnn_tuple_state = tuple(tf.unstack(self.rnn_init_states_, axis=0))  # unstack by rnn layer
                 rnn_net, self.final_state = tf.nn.dynamic_rnn(rnn_cells,
                                                               rnn_net,
                                                               initial_state=rnn_tuple_state,
