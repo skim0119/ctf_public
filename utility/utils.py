@@ -49,7 +49,7 @@ def discount_rewards(rewards, gamma, normalize=False):
 
     """
 
-    disc_reward = np.zeros_like(rewards)
+    disc_reward = np.zeros_like(rewards, dtype=np.float32)
     cumulate_add = 0.0
     for idx, reward in enumerate(reversed(rewards)):
         cumulate_add = (cumulate_add * gamma + reward)
@@ -57,6 +57,8 @@ def discount_rewards(rewards, gamma, normalize=False):
 
     if normalize:
         disc_reward = (disc_reward - np.mean(disc_reward)) / (np.std(disc_reward)+1e-8)
+        
+    disc_reward = disc_reward[::-1]
 
     return disc_reward
 
