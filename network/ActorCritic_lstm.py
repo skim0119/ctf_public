@@ -162,7 +162,7 @@ class ActorCritic:
                 self.lstm_cell = rnn.DropoutWrapper(self.lstm_cell, output_keep_prob=0.8)
                 self.lstm_cells = rnn.MultiRNNCell([self.lstm_cell for _ in range(self.rnn_num_layer)])
                 self.rnn_init_states_ = self.lstm_cells.zero_state(batch_size, tf.float32)  # placeholder
-                rnn_tuple_state = tuple(tf.unstack(self.rnn_init-states_, axis=0))
+                rnn_tuple_state = tuple(tf.unstack(self.rnn_init_states_, axis=0))
                 rnn_net, lstm_state = tf.nn.dynamic_rnn(self.lstm_cell,
                                                         rnn_net,
                                                         initial_state=rnn_tuple_state,
@@ -282,10 +282,10 @@ class ActorCritic:
     def _build_optimizer(self):
         """ Optimizer """
         if self.separate_train:
-            self.critic_optimizer = tf.train.AdamOptimizer(self.lr_critic, name='Adam_critic')
-            self.actor_optimizer = tf.train.AdamOptimizer(self.lr_actor, name='Adam_actor')
+            self.critic_optimizer = tf.train.AdamOptimizer(self.lr_critic)
+            self.actor_optimizer = tf.train.AdamOptimizer(self.lr_actor)
         else:
-            self.optimizer = tf.train.AdamOptimizer(self.lr_critic, name='Adam')
+            self.optimizer = tf.train.AdamOptimizer(self.lr_critic)
 
     def feed_forward(self, state, rnn_init_state, seq_len=[1]):
         feed_dict = {self.state_input_: state,
