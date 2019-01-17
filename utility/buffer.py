@@ -60,13 +60,14 @@ class Trajectory:
         self.length_max = length_max
 
         # Initialize Components
+        self.length = 0
         self.buffer = [[] for _ in range(depth)]
 
     def __repr__(self):
         return f'Trajectory (depth={self.depth},length={self.length_max})'
 
     def __len__(self):
-        return len(self.buffer[0])
+        return self.length
 
     def __getitem__(self, index):
         return self.buffer[index]
@@ -75,28 +76,36 @@ class Trajectory:
         self.buffer[key] = item
 
     def is_full(self):
-        return len(self.buffer[0]) == self.length_max
+        return self.length == self.length_max
 
     def append(self, mdp_tup):
         for buf, element in zip(self.buffer, mdp_tup):
             buf.append(element)
-            if len(self.buffer[0]) == self.length_max:
+            if self.length == self.length_max:
                 buf = buf[1:]
+        # for i, element in enumerate(mdp_tup):
+        #    self.buffer[i].append(element)
+        #    if self.length == self.length_max:
+        #        self.buffer[i] = self.buffer[i][1:]
+        self.length = min(self.length + 1, self.length_max)
 
-    def trim(self, serial_length=None):
-        if serial_length is None:
-            return self
+    def trim(self, serial_length):
         traj_list = []
-        s_, e_ = len(self.buffer[0]) - serial_length, len(self.buffer[0])
+        s_, e_ = self.length - serial_length, self.length
         while e_ > 0:
             new_traj = Trajectory(depth=self.depth, length_max=self.length_max)
-            new_buffer = [buf[max(s_,0):e_] for buf in self.buffer]
+            new_buffer = [buf[max(s_, 0):e_] for buf in self.buffer]
             new_traj.buffer = new_buffer
-            new_traj.length = len(new_traj.buffer[0])
+            new_traj.length = len(new_traj.buffer)
             traj_list.append(new_traj)
             s_ -= serial_length
             e_ -= serial_length
         return traj_list
+
+    def sample(self):
+        # Find longest length sequence
+        ret = tuple(np.array(b) for b in self.buffer)
+        return ret
 
 
 class Trajectory_buffer:
@@ -175,7 +184,12 @@ class Trajectory_buffer:
 
     def extend(self, trajs):
         for traj in trajs:
-            self.append(traj)
+            for i, elem in enumerate(traj):
+                self.buffer[i].append(elem)
+        self.buffer_size += len(trajs)
+        # if len(self.buffer) > self.capacity:
+        #     self.buffer = self.buffer[-self.capacity:]
+        #     self.buffer_size = len(self.buffer)
 
     def sample(self, flush=True):
         """sample
