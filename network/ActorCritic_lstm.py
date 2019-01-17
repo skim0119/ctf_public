@@ -126,20 +126,20 @@ class ActorCritic:
 
             # Convolution
             net = tf.reshape(self.state_input_, [-1] + self.in_size[-3:])
-            net = layers.conv2d(net, 32, [5, 5],
-                                weights_initializer=layers.xavier_initializer_conv2d(),
-                                biases_initializer=tf.zeros_initializer(),
-                                padding='SAME')
-            net = layers.max_pool2d(net, [2, 2])
-            net = layers.conv2d(net, 64, [3, 3],
-                                weights_initializer=layers.xavier_initializer_conv2d(),
-                                biases_initializer=tf.zeros_initializer(),
-                                padding='SAME')
-            net = layers.max_pool2d(net, [2, 2])
-            net = layers.conv2d(net, 64, [2, 2],
-                                weights_initializer=layers.xavier_initializer_conv2d(),
-                                biases_initializer=tf.zeros_initializer(),
-                                padding='SAME')
+            # net = layers.conv2d(net, 32, [5, 5],
+            #                     weights_initializer=layers.xavier_initializer_conv2d(),
+            #                    biases_initializer=tf.zeros_initializer(),
+            #                    padding='SAME')
+            #net = layers.max_pool2d(net, [2, 2])
+            #net = layers.conv2d(net, 64, [3, 3],
+            #                    weights_initializer=layers.xavier_initializer_conv2d(),
+            #                    biases_initializer=tf.zeros_initializer(),
+            #                    padding='SAME')
+            #net = layers.max_pool2d(net, [2, 2])
+            #net = layers.conv2d(net, 64, [2, 2],
+            #                    weights_initializer=layers.xavier_initializer_conv2d(),
+            #                    biases_initializer=tf.zeros_initializer(),
+            #                    padding='SAME')
             serial_net = layers.flatten(net)
             serial_net = layers.fully_connected(serial_net, self.serial_size, activation_fn=tf.nn.elu)
 
@@ -228,12 +228,12 @@ class ActorCritic:
 
             # Actor Loss
             # ppo
-            exp_v_a = self.likelihood_ * self.advantage_flat_ * self.mask_flat
-            exp_v_b = tf.clip_by_value(self.likelihood_, 1 - ppo_epsilon, 1 + ppo_epsilon) * self.advantage_flat_ * self.mask_flat
-            self.actor_loss = -tf.reduce_mean(tf.minimum(exp_v_a, exp_v_b), name='actor_loss') - self.entropy_beta * self.entropy
-            # obj_func = tf.log(tf.reduce_sum(self.action * self.actions_OH, 1))
-            # exp_v = obj_func * self.advantage_flat_ * self.likelihood_ * self.mask_flat
-            # self.actor_loss = -tf.reduce_mean(exp_v, name='actor_loss') - self.entropy_beta * self.entropy
+            #exp_v_a = self.likelihood_ * self.advantage_flat_ * self.mask_flat
+            #exp_v_b = tf.clip_by_value(self.likelihood_, 1 - ppo_epsilon, 1 + ppo_epsilon) * self.advantage_flat_ * self.mask_flat
+            #self.actor_loss = -tf.reduce_mean(tf.minimum(exp_v_a, exp_v_b), name='actor_loss') - self.entropy_beta * self.entropy
+            obj_func = tf.log(tf.reduce_sum(self.action * self.actions_OH, 1))
+            exp_v = obj_func * self.advantage_flat_ * self.likelihood_ * self.mask_flat
+            self.actor_loss = -tf.reduce_mean(exp_v, name='actor_loss') - self.entropy_beta * self.entropy
 
             # Total Loss
             self.total_loss = self.critic_beta * self.critic_loss + self.actor_loss
