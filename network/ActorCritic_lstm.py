@@ -78,7 +78,7 @@ class ActorCritic:
         self.rnn_type = 'GRU'
         self.serial_size = 256  # length of the serial layer (between conv and rnn)
         self.rnn_unit_size = 256  # RNN number of hidden nodes
-        self.rnn_num_layers = 1  # RNN number of layers
+        self.rnn_num_layers = 3  # RNN number of layers
 
         with tf.variable_scope(self.scope):
             self._build_placeholders()
@@ -131,12 +131,12 @@ class ActorCritic:
             #                    biases_initializer=tf.zeros_initializer(),
             #                    padding='SAME')
             #net = layers.max_pool2d(net, [2, 2])
-            #net = layers.conv2d(net, 64, [3, 3],
+            # net = layers.conv2d(net, 64, [3, 3],
             #                    weights_initializer=layers.xavier_initializer_conv2d(),
             #                    biases_initializer=tf.zeros_initializer(),
             #                    padding='SAME')
             #net = layers.max_pool2d(net, [2, 2])
-            #net = layers.conv2d(net, 64, [2, 2],
+            # net = layers.conv2d(net, 64, [2, 2],
             #                    weights_initializer=layers.xavier_initializer_conv2d(),
             #                    biases_initializer=tf.zeros_initializer(),
             #                    padding='SAME')
@@ -146,9 +146,11 @@ class ActorCritic:
             # Recursive Network
             rnn_net = tf.reshape(serial_net, bulk_shape)
             if self.rnn_type == 'GRU':
-                rnn_cell = rnn.GRUCell(self.rnn_unit_size)
-                rnn_cell = rnn.DropoutWrapper(rnn_cell, output_keep_prob=0.8)
-                rnn_cells = rnn.MultiRNNCell([rnn_cell for _ in range(self.rnn_num_layers)])
+                # rnn_cell = tf.contrib.cudnn_rnn.CudnnGRU(self.rnn_unit_size)
+                # rnn_cell = rnn.GRUCell(self.rnn_unit_size)
+                # rnn_cell = rnn.DropoutWrapper(rnn_cell, output_keep_prob=0.8)
+                rnn_cells = rnn.MultiRNNCell([tf.contib.cudnn_rnn.CudnnGRU(self.rnn_unit_size)
+                                              for _ in range(self.rnn_num_layers)])
                 rnn_tuple_state = tuple(tf.unstack(self.rnn_init_states_, axis=0))  # unstack by rnn layer
                 rnn_net, self.final_state = tf.nn.dynamic_rnn(rnn_cells,
                                                               rnn_net,
@@ -212,7 +214,7 @@ class ActorCritic:
 
     def _build_losses(self):
         """ Loss function """
-        ppo_epsilon = 0.01
+        ppo_epsilon = 0.2
         with tf.name_scope('train'):
             with tf.name_scope('masker'):
                 self.mask = tf.sequence_mask(lengths=self.seq_len_, dtype=tf.float32)
@@ -228,9 +230,9 @@ class ActorCritic:
 
             # Actor Loss
             # ppo
-            #exp_v_a = self.likelihood_ * self.advantage_flat_ * self.mask_flat
-            #exp_v_b = tf.clip_by_value(self.likelihood_, 1 - ppo_epsilon, 1 + ppo_epsilon) * self.advantage_flat_ * self.mask_flat
-            #self.actor_loss = -tf.reduce_mean(tf.minimum(exp_v_a, exp_v_b), name='actor_loss') - self.entropy_beta * self.entropy
+            # exp_v_a = self.likelihood_ * self.advantage_flat_ * self.mask_flat
+            # exp_v_b = tf.clip_by_value(self.likelihood_, 1 - ppo_epsilon, 1 + ppo_epsilon) * self.advantage_flat_ * self.mask_flat
+            # self.actor_loss = -tf.reduce_mean(tf.minimum(exp_v_a, exp_v_b), name='actor_loss') - self.entropy_beta * self.entropy
             obj_func = tf.log(tf.reduce_sum(self.action * self.actions_OH, 1))
             exp_v = obj_func * self.advantage_flat_ * self.likelihood_ * self.mask_flat
             self.actor_loss = -tf.reduce_mean(exp_v, name='actor_loss') - self.entropy_beta * self.entropy
