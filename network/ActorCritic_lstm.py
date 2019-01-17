@@ -1,6 +1,7 @@
 import tensorflow as tf
 import tensorflow.contrib.layers as layers
 import tensorflow.contrib.rnn as rnn
+import tensorflow.contrib
 
 import numpy as np
 
@@ -146,11 +147,11 @@ class ActorCritic:
             # Recursive Network
             rnn_net = tf.reshape(serial_net, bulk_shape)
             if self.rnn_type == 'GRU':
-                # rnn_cell = tf.contrib.cudnn_rnn.CudnnGRU(self.rnn_unit_size)
-                # rnn_cell = rnn.GRUCell(self.rnn_unit_size)
-                # rnn_cell = rnn.DropoutWrapper(rnn_cell, output_keep_prob=0.8)
-                rnn_cells = rnn.MultiRNNCell([tf.contib.cudnn_rnn.CudnnGRU(self.rnn_unit_size)
-                                              for _ in range(self.rnn_num_layers)])
+                rnn_cell = rnn.GRUCell(self.rnn_unit_size)
+                #rnn_cell = rnn.DropoutWrapper(rnn_cell, output_keep_prob=0.8)
+                #rnn_cells = tf.contrib.cudnn_rnn.CudnnGRU(self.rnn_num_layers, self.rnn_unit_size)
+                #rnn_net, self.final_state = rnn_cells(rnn_net)
+                rnn_cells = rnn.MultiRNNCell([rnn_cell for _ in range(self.rnn_num_layers)])
                 rnn_tuple_state = tuple(tf.unstack(self.rnn_init_states_, axis=0))  # unstack by rnn layer
                 rnn_net, self.final_state = tf.nn.dynamic_rnn(rnn_cells,
                                                               rnn_net,
