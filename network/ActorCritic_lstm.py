@@ -126,12 +126,12 @@ class ActorCritic:
 
             # Convolution
             net = self.state_input_
-            net = layers.conv2d(input=net,
+            net = layers.conv2d(inputs=net,
                                 filters=32, kernel_size=4, strides=2,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
                                 padding='SAME')
-            net = layers.conv2d(input=net,
+            net = layers.conv2d(inputs=net,
                                 filters=64, kernel_size=2, strides=1,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
