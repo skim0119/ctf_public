@@ -300,7 +300,6 @@ class ActorCritic:
     def feed_backward(self, states, actions, td_targets, advantages, rnn_init_states, seq_lens, retrace_lambda=None):
         if retrace_lambda is not None:
             # Get likelihood of global with states
-            actions_flat = np.reshape(actions, (-1,))
             feed_dict = {self.state_input_: states,
                          self.rnn_init_states_: rnn_init_states,
                          self.seq_len_: seq_lens}
@@ -309,8 +308,8 @@ class ActorCritic:
                                       feed_dict={self.global_network.state_input_: states,
                                                  self.global_network.rnn_init_states_: rnn_init_states,
                                                  self.global_network.seq_len_: seq_lens})
-            target_policy = np.array([p[action] for p, action in zip(soft_prob, actions_flat)])
-            behavior_policy = np.array([p[action] for p, action in zip(current_prob, actions_flat)])
+            target_policy = np.array([p[action] for p, action in zip(soft_prob, actions)])
+            behavior_policy = np.array([p[action] for p, action in zip(current_prob, actions)])
             likelihood = []
             likelihood_cumprod = []
             running_prob = 1.0
