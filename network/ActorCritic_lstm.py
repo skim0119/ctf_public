@@ -59,7 +59,7 @@ class ActorCritic:
         self.sess = sess
 
         # Parameters & Configs
-        self.in_size = [None] + in_size
+        self.in_size = in_size
         self.action_size = action_size
         self.scope = scope
         self.lr_actor = lr_actor
@@ -79,7 +79,7 @@ class ActorCritic:
         self.rnn_type = 'GRU'
         self.serial_size = 256  # length of the serial layer (between conv and rnn)
         self.rnn_unit_size = 256  # RNN number of hidden nodes
-        self.rnn_num_layers = 3  # RNN number of layers
+        self.rnn_num_layers = 2  # RNN number of layers
 
         with tf.variable_scope(self.scope):
             self._build_placeholders()
@@ -127,20 +127,16 @@ class ActorCritic:
 
             # Convolution
             net = tf.reshape(self.state_input_, [-1] + self.in_size[-3:])
-            # net = layers.conv2d(net, 32, [5, 5],
-            #                     weights_initializer=layers.xavier_initializer_conv2d(),
-            #                    biases_initializer=tf.zeros_initializer(),
-            #                    padding='SAME')
-            #net = layers.max_pool2d(net, [2, 2])
-            # net = layers.conv2d(net, 64, [3, 3],
-            #                    weights_initializer=layers.xavier_initializer_conv2d(),
-            #                    biases_initializer=tf.zeros_initializer(),
-            #                    padding='SAME')
-            #net = layers.max_pool2d(net, [2, 2])
-            # net = layers.conv2d(net, 64, [2, 2],
-            #                    weights_initializer=layers.xavier_initializer_conv2d(),
-            #                    biases_initializer=tf.zeros_initializer(),
-            #                    padding='SAME')
+            net = layers.conv2d(input=net,
+                                filters=32, kernel_size=4, strides=2,
+                                weights_initializer=layers.xavier_initializer_conv2d(),
+                                biases_initializer=tf.zeros_initializer(),
+                                padding='SAME')
+            net = layers.conv2d(input=net,
+                                filters=64, kernel_size=2, strides=1,
+                                weights_initializer=layers.xavier_initializer_conv2d(),
+                                biases_initializer=tf.zeros_initializer(),
+                                padding='SAME')
             serial_net = layers.flatten(net)
             serial_net = layers.fully_connected(serial_net, self.serial_size, activation_fn=tf.nn.elu)
 
