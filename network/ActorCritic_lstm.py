@@ -79,15 +79,9 @@ class ActorCritic:
 
         # RNN Configurations
         self.rnn_type = 'GRU'
-<<<<<<< HEAD
         self.serial_size = 256  # length of the serial layer (between conv and rnn)
         self.rnn_unit_size = 256  # RNN number of hidden nodes
-        self.rnn_num_layers = 2  # RNN number of layers
-=======
-        self.serial_size = 256# length of the serial layer (between conv and rnn)
-        self.rnn_unit_size = 256# RNN number of hidden nodes
         self.rnn_num_layers = 1  # RNN number of layers
->>>>>>> fbb2ce2b0fe18a9e52056fb0448e83ca4959e2f4
 
         with tf.variable_scope(self.scope):
             self._build_placeholders()
@@ -107,19 +101,16 @@ class ActorCritic:
                                                    dtype=tf.float32,
                                                    name="rnn_init_states")
         else:
-            self.rnn_init_states_ = tf.placeholder(shape=[self.rnn_num_layers, None, self.rnn_unit_size],
+            self.rnn_init_states_ = tf.placeholder(shape=[self.rnn_num_layers, 2, None, self.rnn_unit_size],
                                                    dtype=tf.float32,
                                                    name="rnn_init_states")
 
         # Backward
-        self.actions_ = tf.placeholder(shape=[None, None], dtype=tf.int32, name='action_hold')
-        self.actions_flat_ = tf.reshape(self.actions_, (-1,))
-        self.actions_OH = tf.one_hot(self.actions_flat_, self.action_size)
+        self.actions_ = tf.placeholder(shape=[None], dtype=tf.int32, name='action_hold')
+        self.actions_OH = tf.one_hot(self.actions_, self.action_size)
 
-        self.td_target_ = tf.placeholder(shape=[None, None], dtype=tf.float32, name='td_target_holder')
-        self.td_target_flat_ = tf.reshape(self.td_target_, (-1,))
-        self.advantage_ = tf.placeholder(shape=[None, None], dtype=tf.float32, name='adv_holder')
-        self.advantage_flat_ = tf.reshape(self.advantage_, (-1,))
+        self.td_target_ = tf.placeholder(shape=[None], dtype=tf.float32, name='td_target_holder')
+        self.advantage_ = tf.placeholder(shape=[None], dtype=tf.float32, name='adv_holder')
         self.likelihood_ = tf.placeholder(shape=[None], dtype=tf.float32, name='likelihood_holder')
         self.likelihood_cumprod_ = tf.placeholder(shape=[None], dtype=tf.float32, name='likelihood_cumprod_holder')
 
@@ -134,7 +125,7 @@ class ActorCritic:
             bulk_shape = tf.stack([batch_size, seq_length, self.serial_size])
 
             # Convolution
-            net = tf.reshape(self.state_input_, [-1] + self.in_size[-3:])
+            net = self.state_input_
             net = layers.conv2d(input=net,
                                 filters=32, kernel_size=4, strides=2,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
@@ -149,7 +140,7 @@ class ActorCritic:
             serial_net = layers.fully_connected(serial_net, self.serial_size, activation_fn=tf.nn.elu)
 
             # Recursive Network
-            rnn_net = tf.reshape(serial_net, bulk_shape)
+            rnn_net = tf.expand_dims(serial_net, [0])
             if self.rnn_type == 'GRU':
                 #rnn_cells = tf.contrib.cudnn_rnn.CudnnGRU(self.rnn_num_layers, self.rnn_unit_size)
                 #rnn_net, self.final_state = rnn_cells(rnn_net)
@@ -159,7 +150,7 @@ class ActorCritic:
                 rnn_net, self.final_state = tf.nn.dynamic_rnn(rnn_cells,
                                                               rnn_net,
                                                               initial_state=rnn_tuple_state
-                                                              #sequence_length=self.seq_len_
+                                                              # sequence_length=self.seq_len_
                                                               )
                 rnn_net = tf.reshape(rnn_net, (-1, self.rnn_unit_size))
             else:
@@ -172,7 +163,7 @@ class ActorCritic:
                 rnn_net, lstm_state = tf.nn.dynamic_rnn(self.lstm_cell,
                                                         rnn_net,
                                                         initial_state=rnn_tuple_state,
-                                                        #sequence_length=self.seq_len_,
+                                                        # sequence_length=self.seq_len_,
                                                         )
                 self.final_state = lstm_state
                 # lstm_c, lstm_h = lstm_state
@@ -222,24 +213,23 @@ class ActorCritic:
         with tf.name_scope('train'):
             with tf.name_scope('masker'):
                 self.mask = tf.sequence_mask(lengths=self.seq_len_, dtype=tf.float32)
-                self.mask_flat = tf.reshape(self.mask, (-1,))
 
             # Entropy
             self.entropy = -tf.reduce_mean(self.action * tf.log(self.action), name='entropy')
 
             # Critic (value) Loss
-            td_error = self.td_target_flat_ - self.critic
-            self.critic_loss = tf.reduce_mean(tf.square(td_error), # * self.mask_flat),  # * self.likelihood_cumprod_,
+            td_error = self.td_target_ - self.critic
+            self.critic_loss = tf.reduce_mean(tf.square(td_error),  # * self.mask_flat),  # * self.likelihood_cumprod_,
                                               name='critic_loss')
 
             # Actor Loss
             # ppo
-            # exp_v_a = self.likelihood_ * self.advantage_flat_ * self.mask_flat
-            # exp_v_b = tf.clip_by_value(self.likelihood_, 1 - ppo_epsilon, 1 + ppo_epsilon) * self.advantage_flat_ * self.mask_flat
+            # exp_v_a = self.likelihood_ * self.advantage_* self.mask_flat
+            # exp_v_b = tf.clip_by_value(self.likelihood_, 1 - ppo_epsilon, 1 + ppo_epsilon) * self.advantage_* self.mask_flat
             # self.actor_loss = -tf.reduce_mean(tf.minimum(exp_v_a, exp_v_b), name='actor_loss') - self.entropy_beta * self.entropy
             obj_func = tf.log(tf.reduce_sum(self.action * self.actions_OH, 1))
-            exp_v = obj_func * self.advantage_flat_ * self.likelihood_ # * self.mask_flat
-            self.actor_loss = -tf.reduce_mean(exp_v, name='actor_loss')# - self.entropy_beta * self.entropy
+            exp_v = obj_func * self.advantage_ * self.likelihood_  # * self.mask_flat
+            self.actor_loss = -tf.reduce_mean(exp_v, name='actor_loss')  # - self.entropy_beta * self.entropy
 
             # Total Loss
             self.total_loss = self.critic_beta * self.critic_loss + self.actor_loss
