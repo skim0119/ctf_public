@@ -127,17 +127,18 @@ class ActorCritic:
             # Convolution
             net = self.state_input_
             net = layers.conv2d(inputs=net,
-                                filters=32, kernel_size=4, strides=2,
+                                num_outputs=32, kernel_size=4, stride=2,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
                                 padding='SAME')
             net = layers.conv2d(inputs=net,
-                                filters=64, kernel_size=2, strides=1,
+                                num_outputs=64, kernel_size=2, stride=1,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
                                 padding='SAME')
             serial_net = layers.flatten(net)
             serial_net = layers.fully_connected(serial_net, self.serial_size, activation_fn=tf.nn.elu)
+            serial_net = layers.layer_norm(serial_net)
 
             # Recursive Network
             rnn_net = tf.expand_dims(serial_net, [0])
@@ -195,7 +196,19 @@ class ActorCritic:
             # net = tf.reshape(rnn_net, [-1, rnn_hidden_size1])
 
         with tf.variable_scope('critic'):
-            critic_net = layers.fully_connected(tf.stop_gradient(serial_net),
+            critic_net = self.state_input_
+            critic_net = layers.conv2d(inputs=critic_net,
+                                num_outputs=32, kernel_size=4, stride=2,
+                                weights_initializer=layers.xavier_initializer_conv2d(),
+                                biases_initializer=tf.zeros_initializer(),
+                                padding='SAME')
+            critic_net = layers.conv2d(inputs=critic_net,
+                                num_outputs=64, kernel_size=2, stride=1,
+                                weights_initializer=layers.xavier_initializer_conv2d(),
+                                biases_initializer=tf.zeros_initializer(),
+                                padding='SAME')
+            critic_net= layers.flatten(critic_net)
+            critic_net = layers.fully_connected(critic_net,
                                                 1,
                                                 activation_fn=None)
             self.critic = tf.reshape(critic_net, [-1, ])  # column to row
