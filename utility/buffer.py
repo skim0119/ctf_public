@@ -106,12 +106,21 @@ class Trajectory:
         return ret
 
     def draw_trace(self, seq_len=8):
-        if seq_len > len(self.buffer[0]):
-            return None
-        start = random.sample(range(len(self.buffer[0]) - seq_len), k=1)[0]
-        end = start + seq_len
-        ret = tuple(np.array(b[start:end]) for b in self.buffer)
-        return ret
+        buf_len = len(self.buffer[0])
+        if seq_len > buf_len:  # return with concat zeros
+            ret = []
+            exceed_len = seq_len - buf_len
+            for buf in self.buffer:
+                buf = np.array(buf)
+                shape = [exceed_len] + list(buf.shape[1:])
+                buf = np.append(buf, np.zeros(shape), axis=0)
+                ret.append(buf)
+            return tuple(ret)
+        else:
+            start = random.sample(range(len(self.buffer[0]) - seq_len), k=1)[0]
+            end = start + seq_len
+            ret = tuple(np.array(b[start:end]) for b in self.buffer)
+            return ret
 
 
 class Trajectory_buffer:
