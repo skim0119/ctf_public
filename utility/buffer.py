@@ -1,4 +1,5 @@
 import numpy as np
+import random
 
 """ Buffer modules in CtF Project
 
@@ -60,14 +61,13 @@ class Trajectory:
         self.length_max = length_max
 
         # Initialize Components
-        self.length = 0
         self.buffer = [[] for _ in range(depth)]
 
     def __repr__(self):
         return f'Trajectory (depth={self.depth},length={self.length_max})'
 
     def __len__(self):
-        return self.length
+        return len(self.buffer[0])
 
     def __getitem__(self, index):
         return self.buffer[index]
@@ -76,27 +76,25 @@ class Trajectory:
         self.buffer[key] = item
 
     def is_full(self):
-        return self.length == self.length_max
+        return len(self.buffer[0]) == self.length_max
 
     def append(self, mdp_tup):
         for buf, element in zip(self.buffer, mdp_tup):
             buf.append(element)
-            if self.length == self.length_max:
+            if len(self.buffer[0]) == self.length_max:
                 buf = buf[1:]
         # for i, element in enumerate(mdp_tup):
         #    self.buffer[i].append(element)
-        #    if self.length == self.length_max:
+        #    if len(self.buffer[0]) == self.length_max:
         #        self.buffer[i] = self.buffer[i][1:]
-        self.length = min(self.length + 1, self.length_max)
 
     def trim(self, serial_length):
         traj_list = []
-        s_, e_ = self.length - serial_length, self.length
+        s_, e_ = len(self.buffer[0]) - serial_length, len(self.buffer[0])
         while e_ > 0:
             new_traj = Trajectory(depth=self.depth, length_max=self.length_max)
             new_buffer = [buf[max(s_, 0):e_] for buf in self.buffer]
             new_traj.buffer = new_buffer
-            new_traj.length = len(new_traj.buffer)
             traj_list.append(new_traj)
             s_ -= serial_length
             e_ -= serial_length
@@ -105,6 +103,14 @@ class Trajectory:
     def sample(self):
         # Find longest length sequence
         ret = tuple(np.array(b) for b in self.buffer)
+        return ret
+
+    def draw_trace(self, seq_len=8):
+        if seq_len > len(self.buffer[0]):
+            return None
+        start = random.sample(range(len(self.buffer[0]) - seq_len), k=1)[0]
+        end = start + seq_len
+        ret = tuple(np.array(b[start:end]) for b in self.buffer)
         return ret
 
 
