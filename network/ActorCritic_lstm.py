@@ -90,6 +90,8 @@ class ActorCritic:
             if scope != 'global':
                 self._build_losses()
                 self._build_pipeline()
+        if scope != 'global':
+            self._build_summary()
 
     def _build_placeholders(self):
         """ Define the placeholders for forward and back propagation """
@@ -301,6 +303,21 @@ class ActorCritic:
         else:
             self.optimizer = tf.train.AdamOptimizer(self.lr_critic)
 
+    def _build_summary(self):
+        with tf.variable_scope('grad_summary'):
+            grad_summary = []
+            for grad, var in zip(self.a_grads, self.a_vars):
+                var_name = var.name+'_grad'
+                var_name = var_name.replace(':','_')
+                var_name = var_name.split('/')[-1]
+                grad_summary.append(tf.summary.histogram(var_name, grad))
+            for grad, var in zip(self.c_grads, self.c_vars):
+                var_name = var.name+'_grad'
+                var_name = var_name.replace(':','_')
+                var_name = var_name.split('/')[-1]
+                grad_summary.append(tf.summary.histogram(var_name, grad))
+            self.grad_summary = tf.summary.merge(grad_summary)
+
     def feed_forward(self, state, rnn_init_state, seq_len=[1]):
         feed_dict = {self.state_input_: state,
                      self.rnn_init_states_: rnn_init_state,
@@ -348,9 +365,9 @@ class ActorCritic:
             self.likelihood_cumprod_: likelihood_cumprod
         }
         self.sess.run(self.update_ops, feed_dict)
-        al, cl, etrpy = self.sess.run([self.actor_loss, self.critic_loss, self.entropy], feed_dict)
+        al, cl, etrpy, grad_summary = self.sess.run([self.actor_loss, self.critic_loss, self.entropy, self.grad_summary], feed_dict)
 
-        return al, cl, etrpy
+        return al, cl, etrpy, grad_summary
 
     def pull_global(self):
         self.sess.run(self.pull_ops)
