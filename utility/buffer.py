@@ -117,7 +117,7 @@ class Trajectory:
                 ret.append(buf)
             return tuple(ret)
         else:
-            start = random.sample(range(len(self.buffer[0]) - seq_len), k=1)[0]
+            start = random.sample(range(len(self.buffer[0]) - seq_len + 1), k=1)[0]
             end = start + seq_len
             ret = tuple(np.array(b[start:end]) for b in self.buffer)
             return ret
