@@ -140,7 +140,7 @@ class ActorCritic:
                                 padding='SAME')
             serial_net = layers.flatten(net)
             serial_net = layers.fully_connected(serial_net, self.serial_size, activation_fn=tf.nn.elu)
-            serial_net = layers.layer_norm(serial_net)
+            #serial_net = layers.layer_norm(serial_net)
 
             # Recursive Network
             rnn_net = tf.expand_dims(serial_net, [0])
@@ -152,8 +152,8 @@ class ActorCritic:
                 rnn_tuple_state = tuple(tf.unstack(self.rnn_init_states_, axis=0))  # unstack by rnn layer
                 rnn_net, self.final_state = tf.nn.dynamic_rnn(rnn_cells,
                                                               rnn_net,
-                                                              initial_state=rnn_tuple_state
-                                                              # sequence_length=self.seq_len_
+                                                              initial_state=rnn_tuple_state,
+                                                              sequence_length=self.seq_len_
                                                               )
                 rnn_net = tf.reshape(rnn_net, (-1, self.rnn_unit_size))
             else:
@@ -172,8 +172,10 @@ class ActorCritic:
                 # lstm_c, lstm_h = lstm_state
                 # self.final_state = (lstm_c[:1, :], lstm_h[:1, :])
                 rnn_net = tf.reshape(rnn_net, (-1, self.rnn_unit_size))
-
-            self.logit = layers.fully_connected(rnn_net,
+            
+            net = rnn_net + serial_net
+            net = layers.fully_connected(net, self.serial_size)
+            self.logit = layers.fully_connected(net,
                                                 self.action_size,
                                                 weights_initializer=layers.xavier_initializer(),
                                                 biases_initializer=tf.zeros_initializer(),
@@ -210,6 +212,7 @@ class ActorCritic:
                                 biases_initializer=tf.zeros_initializer(),
                                 padding='SAME')
             critic_net= layers.flatten(critic_net)
+            critic_net = layers.fully_connected(critic_net, self.serial_size)
             critic_net = layers.fully_connected(critic_net,
                                                 1,
                                                 activation_fn=None)
@@ -243,8 +246,8 @@ class ActorCritic:
             # exp_v_b = tf.clip_by_value(self.likelihood_, 1 - ppo_epsilon, 1 + ppo_epsilon) * self.advantage_* self.mask_flat
             # self.actor_loss = -tf.reduce_mean(tf.minimum(exp_v_a, exp_v_b), name='actor_loss') - self.entropy_beta * self.entropy
             obj_func = tf.log(tf.reduce_sum(self.action * self.actions_OH, 1))
-            exp_v = obj_func * self.advantage_ * self.likelihood_  # * self.mask_flat
-            self.actor_loss = -tf.reduce_mean(exp_v, name='actor_loss')  # - self.entropy_beta * self.entropy
+            exp_v = obj_func * self.advantage_# * self.likelihood_  # * self.mask_flat
+            self.actor_loss = tf.reduce_mean(-exp_v, name='actor_loss')  # - self.entropy_beta * self.entropy
 
             # Total Loss
             self.total_loss = self.critic_beta * self.critic_loss + self.actor_loss
