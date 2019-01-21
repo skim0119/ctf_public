@@ -78,7 +78,7 @@ class ActorCritic:
         self.output_tag = self.scope + '/actor/action'
 
         # RNN Configurations
-        self.rnn_type = 'GRU'
+        self.rnn_type = 'LSTM'
         self.serial_size = 256  # length of the serial layer (between conv and rnn)
         self.rnn_unit_size = 256  # RNN number of hidden nodes
         self.rnn_num_layers = 1  # RNN number of layers
@@ -109,7 +109,7 @@ class ActorCritic:
 
         # Backward
         self.actions_ = tf.placeholder(shape=[None], dtype=tf.int32, name='action_hold')
-        self.actions_OH = tf.one_hot(self.actions_, self.action_size, dtype=tf.float32)
+        self.actions_OH = tf.one_hot(self.actions_, self.action_size)
 
         self.td_target_ = tf.placeholder(shape=[None], dtype=tf.float32, name='td_target_holder')
         self.advantage_ = tf.placeholder(shape=[None], dtype=tf.float32, name='adv_holder')
@@ -159,20 +159,20 @@ class ActorCritic:
             else:
                 # Multi RNN Cell is not yet implemented
                 self.lstm_cell = rnn.BasicLSTMCell(self.rnn_unit_size)
-                self.lstm_cell = rnn.DropoutWrapper(self.lstm_cell, output_keep_prob=0.8)
+                #self.lstm_cell = rnn.DropoutWrapper(self.lstm_cell, output_keep_prob=0.8)
                 self.lstm_cells = rnn.MultiRNNCell([self.lstm_cell for _ in range(self.rnn_num_layer)])
                 self.rnn_init_states_ = self.lstm_cells.zero_state(batch_size, tf.float32)  # placeholder
                 rnn_tuple_state = tuple(tf.unstack(self.rnn_init_states_, axis=0))
                 rnn_net, lstm_state = tf.nn.dynamic_rnn(self.lstm_cell,
                                                         rnn_net,
                                                         initial_state=rnn_tuple_state,
-                                                        # sequence_length=self.seq_len_,
+                                                        sequence_length=self.seq_len_,
                                                         )
                 self.final_state = lstm_state
                 # lstm_c, lstm_h = lstm_state
                 # self.final_state = (lstm_c[:1, :], lstm_h[:1, :])
                 rnn_net = tf.reshape(rnn_net, (-1, self.rnn_unit_size))
-            
+
             net = rnn_net + serial_net
             net = layers.fully_connected(net, self.serial_size)
             self.logit = layers.fully_connected(net,
@@ -202,16 +202,16 @@ class ActorCritic:
         with tf.variable_scope('critic'):
             critic_net = self.state_input_
             critic_net = layers.conv2d(inputs=critic_net,
-                                num_outputs=32, kernel_size=4, stride=2,
-                                weights_initializer=layers.xavier_initializer_conv2d(),
-                                biases_initializer=tf.zeros_initializer(),
-                                padding='SAME')
+                                       num_outputs=32, kernel_size=4, stride=2,
+                                       weights_initializer=layers.xavier_initializer_conv2d(),
+                                       biases_initializer=tf.zeros_initializer(),
+                                       padding='SAME')
             critic_net = layers.conv2d(inputs=critic_net,
-                                num_outputs=64, kernel_size=2, stride=1,
-                                weights_initializer=layers.xavier_initializer_conv2d(),
-                                biases_initializer=tf.zeros_initializer(),
-                                padding='SAME')
-            critic_net= layers.flatten(critic_net)
+                                       num_outputs=64, kernel_size=2, stride=1,
+                                       weights_initializer=layers.xavier_initializer_conv2d(),
+                                       biases_initializer=tf.zeros_initializer(),
+                                       padding='SAME')
+            critic_net = layers.flatten(critic_net)
             critic_net = layers.fully_connected(critic_net, self.serial_size)
             critic_net = layers.fully_connected(critic_net,
                                                 1,
@@ -246,7 +246,7 @@ class ActorCritic:
             # exp_v_b = tf.clip_by_value(self.likelihood_, 1 - ppo_epsilon, 1 + ppo_epsilon) * self.advantage_* self.mask_flat
             # self.actor_loss = -tf.reduce_mean(tf.minimum(exp_v_a, exp_v_b), name='actor_loss') - self.entropy_beta * self.entropy
             obj_func = tf.log(tf.reduce_sum(self.action * self.actions_OH, 1))
-            exp_v = obj_func * self.advantage_# * self.likelihood_  # * self.mask_flat
+            exp_v = obj_func * self.advantage_  # * self.likelihood_  # * self.mask_flat
             self.actor_loss = tf.reduce_mean(-exp_v, name='actor_loss')  # - self.entropy_beta * self.entropy
 
             # Total Loss
@@ -275,9 +275,9 @@ class ActorCritic:
                     self.pull_ops = tf.group(pull_a_vars_op, pull_c_vars_op)
                 # Push local weights to global weights
                 with tf.name_scope('push'):
-                    update_a_op = self.actor_optimizer.apply_gradients(
+                    update_a_op = self.global_network.actor_optimizer.apply_gradients(
                         zip(self.a_grads, self.global_network.a_vars))
-                    update_c_op = self.critic_optimizer.apply_gradients(
+                    update_c_op = self.global_network.critic_optimizer.apply_gradients(
                         zip(self.c_grads, self.global_network.c_vars))
                     self.update_ops = tf.group(update_a_op, update_c_op)
         else:
@@ -309,12 +309,16 @@ class ActorCritic:
     def _build_summary(self):
         with tf.variable_scope('grad_summary'):
             grad_summary = []
-            for grad, var in zip(self.a_grads + self.c_grads, self.a_vars+self.c_vars):
-                var_name = var.name+'_grad'
-                var_name = var_name.replace(':','_')
-                var_name = var_name.split('/')[-2]
-                if grad is not None:
-                    grad_summary.append(tf.summary.histogram(var_name, grad))
+            for grad, var in zip(self.a_grads, self.a_vars):
+                var_name = var.name + '_grad'
+                var_name = var_name.replace(':', '_')
+                var_name = var_name.split('/')[-1]
+                grad_summary.append(tf.summary.histogram(var_name, grad))
+            for grad, var in zip(self.c_grads, self.c_vars):
+                var_name = var.name + '_grad'
+                var_name = var_name.replace(':', '_')
+                var_name = var_name.split('/')[-1]
+                grad_summary.append(tf.summary.histogram(var_name, grad))
             self.grad_summary = tf.summary.merge(grad_summary)
 
     def feed_forward(self, state, rnn_init_state, seq_len=[1]):
