@@ -109,7 +109,7 @@ class ActorCritic:
 
         # Backward
         self.actions_ = tf.placeholder(shape=[None], dtype=tf.int32, name='action_hold')
-        self.actions_OH = tf.one_hot(self.actions_, self.action_size)
+        self.actions_OH = tf.one_hot(self.actions_, self.action_size, dtype=tf.float32)
 
         self.td_target_ = tf.placeholder(shape=[None], dtype=tf.float32, name='td_target_holder')
         self.advantage_ = tf.placeholder(shape=[None], dtype=tf.float32, name='adv_holder')
@@ -275,9 +275,9 @@ class ActorCritic:
                     self.pull_ops = tf.group(pull_a_vars_op, pull_c_vars_op)
                 # Push local weights to global weights
                 with tf.name_scope('push'):
-                    update_a_op = self.global_network.actor_optimizer.apply_gradients(
+                    update_a_op = self.actor_optimizer.apply_gradients(
                         zip(self.a_grads, self.global_network.a_vars))
-                    update_c_op = self.global_network.critic_optimizer.apply_gradients(
+                    update_c_op = self.critic_optimizer.apply_gradients(
                         zip(self.c_grads, self.global_network.c_vars))
                     self.update_ops = tf.group(update_a_op, update_c_op)
         else:
@@ -309,16 +309,12 @@ class ActorCritic:
     def _build_summary(self):
         with tf.variable_scope('grad_summary'):
             grad_summary = []
-            for grad, var in zip(self.a_grads, self.a_vars):
+            for grad, var in zip(self.a_grads + self.c_grads, self.a_vars+self.c_vars):
                 var_name = var.name+'_grad'
                 var_name = var_name.replace(':','_')
-                var_name = var_name.split('/')[-1]
-                grad_summary.append(tf.summary.histogram(var_name, grad))
-            for grad, var in zip(self.c_grads, self.c_vars):
-                var_name = var.name+'_grad'
-                var_name = var_name.replace(':','_')
-                var_name = var_name.split('/')[-1]
-                grad_summary.append(tf.summary.histogram(var_name, grad))
+                var_name = var_name.split('/')[-2]
+                if grad is not None:
+                    grad_summary.append(tf.summary.histogram(var_name, grad))
             self.grad_summary = tf.summary.merge(grad_summary)
 
     def feed_forward(self, state, rnn_init_state, seq_len=[1]):
