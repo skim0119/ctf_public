@@ -102,14 +102,10 @@ class ActorCritic:
             self.rnn_init_states_ = tf.placeholder(shape=[self.rnn_num_layers, None, self.rnn_unit_size],
                                                    dtype=tf.float32,
                                                    name="rnn_init_states")
-        else:
-            self.rnn_init_states_ = tf.placeholder(shape=[self.rnn_num_layers, 2, None, self.rnn_unit_size],
-                                                   dtype=tf.float32,
-                                                   name="rnn_init_states")
 
         # Backward
         self.actions_ = tf.placeholder(shape=[None], dtype=tf.int32, name='action_hold')
-        self.actions_OH = tf.one_hot(self.actions_, self.action_size)
+        self.actions_OH = tf.one_hot(self.actions_, self.action_size, dtype=tf.float32)
 
         self.td_target_ = tf.placeholder(shape=[None], dtype=tf.float32, name='td_target_holder')
         self.advantage_ = tf.placeholder(shape=[None], dtype=tf.float32, name='adv_holder')
@@ -158,14 +154,14 @@ class ActorCritic:
                 rnn_net = tf.reshape(rnn_net, (-1, self.rnn_unit_size))
             else:
                 # Multi RNN Cell is not yet implemented
-                self.lstm_cell = rnn.BasicLSTMCell(self.rnn_unit_size)
+                self.lstm_cell = tf.nn.rnn_cell.LSTMCell(self.rnn_unit_size)
                 #self.lstm_cell = rnn.DropoutWrapper(self.lstm_cell, output_keep_prob=0.8)
-                self.lstm_cells = rnn.MultiRNNCell([self.lstm_cell for _ in range(self.rnn_num_layer)])
-                self.rnn_init_states_ = self.lstm_cells.zero_state(batch_size, tf.float32)  # placeholder
-                rnn_tuple_state = tuple(tf.unstack(self.rnn_init_states_, axis=0))
+                #self.lstm_cells = rnn.MultiRNNCell([self.lstm_cell for _ in range(self.rnn_num_layers)])
+                self.rnn_init_states_ = self.lstm_cell.zero_state(batch_size, tf.float32)  # placeholder
+                #rnn_tuple_state = tf.nn.rnn_cell.LSTMStateTuple(*tf.unstack(self.rnn_init_states_,axis=1)) # Multicell feature
                 rnn_net, lstm_state = tf.nn.dynamic_rnn(self.lstm_cell,
                                                         rnn_net,
-                                                        initial_state=rnn_tuple_state,
+                                                        initial_state=self.rnn_init_states_,
                                                         sequence_length=self.seq_len_,
                                                         )
                 self.final_state = lstm_state
@@ -380,7 +376,8 @@ class ActorCritic:
             # 1 for gru state number
             init_state = np.zeros((self.rnn_num_layers, batch_size, self.rnn_unit_size))
         else:
-            c_init = np.zeros((1, self.lstm_cell.state_size.c), np.float32)
-            h_init = np.zeros((1, self.lstm_cell.state_size.h), np.float32)
-            init_state = [c_init, h_init]
+            init_state = (np.zeros([1,self.lstm_cell.state_size.c]),np.zeros([1,self.lstm_cell.state_size.h]))
+            #c_init = np.zeros((self.rnn_num_layers, 1, self.lstm_cell.state_size.c), np.float32)
+            #h_init = np.zeros((self.rnn_num_layers, 1, self.lstm_cell.state_size.h), np.float32)
+            #init_state = [c_init, h_init]
         return init_state
