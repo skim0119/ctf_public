@@ -222,7 +222,7 @@ class ActorCritic:
 
             # Critic (value) Loss
             td_error = self.td_target_ - self.critic
-            self.critic_loss = tf.reduce_mean(tf.square(td_error) * self.mask_flat,  # * self.likelihood_cumprod_,
+            self.critic_loss = tf.reduce_mean(tf.square(td_error),#  * self.mask_flat,  # * self.likelihood_cumprod_,
                                               name='critic_loss')
 
             # Actor Loss
@@ -231,7 +231,7 @@ class ActorCritic:
             # exp_v_b = tf.clip_by_value(self.likelihood_, 1 - ppo_epsilon, 1 + ppo_epsilon) * self.advantage_* self.mask_flat
             # self.actor_loss = -tf.reduce_mean(tf.minimum(exp_v_a, exp_v_b), name='actor_loss') - self.entropy_beta * self.entropy
             obj_func = tf.log(tf.reduce_sum(self.action * self.actions_OH, 1))
-            exp_v = obj_func * self.advantage * self.mask_flat  # * self.likelihood_
+            exp_v = obj_func * self.advantage_ # * self.mask_flat  # * self.likelihood_
             self.actor_loss = tf.reduce_mean(-exp_v, name='actor_loss') - self.entropy_beta * self.entropy
 
             # Total Loss
