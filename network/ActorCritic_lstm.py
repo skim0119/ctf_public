@@ -97,6 +97,8 @@ class ActorCritic:
         # Forward
         self.state_input_ = tf.placeholder(shape=self.in_size, dtype=tf.float32, name='state')
         self.seq_len_ = tf.placeholder(shape=(None,), dtype=tf.int32, name="seq_len")
+        self.mask_len_ = tf.placeholder(shape=(None,), dtype=tf.int32, name="mask_len")
+        self.mask_maxlen_ = tf.placeholder(shape=None, dtype=tf.int32, name="mask_maxlen")
         if self.rnn_type == 'GRU':
             self.rnn_init_states_ = tf.placeholder(shape=[self.rnn_num_layers, None, self.rnn_unit_size],
                                                    dtype=tf.float32,
@@ -209,17 +211,18 @@ class ActorCritic:
 
     def _build_losses(self):
         """ Loss function """
-        ppo_epsilon = 0.2
+        # ppo_epsilon = 0.2
         with tf.name_scope('train'):
             with tf.name_scope('masker'):
-                self.mask = tf.sequence_mask(lengths=self.seq_len_, dtype=tf.float32)
+                self.mask = tf.sequence_mask(lengths=self.mask_len_, maxlen=self.mask_maxlen_, dtype=tf.float32)
+                self.mask_flat = tf.reshape(self.mask, (-1,))
 
             # Entropy
             self.entropy = -tf.reduce_mean(self.action * tf.log(self.action), name='entropy')
 
             # Critic (value) Loss
             td_error = self.td_target_ - self.critic
-            self.critic_loss = tf.reduce_mean(tf.square(td_error),  # * self.mask_flat),  # * self.likelihood_cumprod_,
+            self.critic_loss = tf.reduce_mean(tf.square(td_error) * self.mask_flat,  # * self.likelihood_cumprod_,
                                               name='critic_loss')
 
             # Actor Loss
@@ -228,8 +231,8 @@ class ActorCritic:
             # exp_v_b = tf.clip_by_value(self.likelihood_, 1 - ppo_epsilon, 1 + ppo_epsilon) * self.advantage_* self.mask_flat
             # self.actor_loss = -tf.reduce_mean(tf.minimum(exp_v_a, exp_v_b), name='actor_loss') - self.entropy_beta * self.entropy
             obj_func = tf.log(tf.reduce_sum(self.action * self.actions_OH, 1))
-            exp_v = obj_func * self.advantage_  # * self.likelihood_  # * self.mask_flat
-            self.actor_loss = tf.reduce_mean(-exp_v, name='actor_loss')  # - self.entropy_beta * self.entropy
+            exp_v = obj_func * self.advantage * self.mask_flat  # * self.likelihood_
+            self.actor_loss = tf.reduce_mean(-exp_v, name='actor_loss') - self.entropy_beta * self.entropy
 
             # Total Loss
             self.total_loss = self.critic_beta * self.critic_loss + self.actor_loss
@@ -312,7 +315,8 @@ class ActorCritic:
         action = [np.random.choice(self.action_size, p=prob / sum(prob)) for prob in action_prob]
         return action, critic.tolist(), final_state
 
-    def feed_backward(self, states, actions, td_targets, advantages, rnn_init_states, seq_lens, retrace_lambda=None):
+    def feed_backward(self, states, actions, td_targets, advantages, rnn_init_states, seq_lens, retrace_lambda=None, loss_mask=1.0):
+        # Retrace Implementation
         if retrace_lambda is not None:
             # Get likelihood of global with states
             feed_dict = {self.state_input_: states,
@@ -339,6 +343,10 @@ class ActorCritic:
             likelihood = np.ones_like(advantages)
             likelihood_cumprod = np.ones_like(advantages)
 
+        # Loss Mask
+        mask_lens = (seq_lens * loss_mask).astype(int)
+        mask_maxlen = seq_lens[0]
+
         feed_dict = {
             self.state_input_: states,
             self.actions_: actions,
@@ -347,7 +355,9 @@ class ActorCritic:
             self.rnn_init_states_: rnn_init_states,
             self.seq_len_: seq_lens,
             self.likelihood_: likelihood,
-            self.likelihood_cumprod_: likelihood_cumprod
+            self.likelihood_cumprod_: likelihood_cumprod,
+            self.mask_len_: mask_lens,
+            self.mask_maxlen_: mask_maxlen
         }
         self.sess.run(self.update_ops, feed_dict)
         al, cl, etrpy, grad_summary = self.sess.run([self.actor_loss, self.critic_loss, self.entropy, self.grad_summary], feed_dict)
