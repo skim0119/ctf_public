@@ -120,42 +120,36 @@ class ActorCritic:
         """
         with tf.variable_scope('actor'):
             # Parameter
-            batch_size, seq_length = tf.shape(self.state_input_)[0], tf.shape(self.state_input_)[1]
-            bulk_shape = tf.stack([batch_size, seq_length, self.serial_size])
+            batch_size = tf.shape(self.state_input_)[0]
 
             # Convolution
             net = self.state_input_
-            net = layers.conv2d(inputs=net,
-                                num_outputs=32, kernel_size=4, stride=2,
-                                weights_initializer=layers.xavier_initializer_conv2d(),
-                                biases_initializer=tf.zeros_initializer(),
-                                padding='SAME')
-            net = layers.conv2d(inputs=net,
-                                num_outputs=64, kernel_size=2, stride=1,
-                                weights_initializer=layers.xavier_initializer_conv2d(),
-                                biases_initializer=tf.zeros_initializer(),
-                                padding='SAME')
+            #net = layers.conv2d(inputs=net,
+            #                    num_outputs=32, kernel_size=4, stride=2,
+            #                    weights_initializer=layers.xavier_initializer_conv2d(),
+            #                    biases_initializer=tf.zeros_initializer(),
+            #                    padding='SAME')
+            #net = layers.conv2d(inputs=net,
+            #                    num_outputs=64, kernel_size=2, stride=1,
+            #                    weights_initializer=layers.xavier_initializer_conv2d(),
+            #                    biases_initializer=tf.zeros_initializer(),
+            #                    padding='SAME')
             serial_net = layers.flatten(net)
             serial_net = layers.fully_connected(serial_net, self.serial_size, activation_fn=tf.nn.elu)
             # serial_net = layers.layer_norm(serial_net)
-
+            
             # Recursive Network
-            rnn_net = tf.expand_dims(serial_net, [0])
-            if self.rnn_type == 'CudnnGRU':
-                # Need more search
-                rnn_cells = tf.contrib.cudnn_rnn.CudnnGRU(self.rnn_num_layers, self.rnn_unit_size)
-                rnn_net, self.final_state = rnn_cells(rnn_net)
-                pass
-            elif self.rnn_type == 'GRU':
-                # rnn_cell = rnn.DropoutWrapper(rnn_cell, output_keep_prob=0.8)
-                rnn_cells = rnn.MultiRNNCell([rnn.GRUCell(self.rnn_unit_size) for _ in range(self.rnn_num_layers)])
-                rnn_tuple_state = tuple(tf.unstack(self.rnn_init_states_, axis=0))  # unstack by rnn layer
-                rnn_net, self.final_state = tf.nn.dynamic_rnn(rnn_cells,
-                                                              rnn_net,
-                                                              initial_state=rnn_tuple_state,
-                                                              sequence_length=self.seq_len_
-                                                              )
-                rnn_net = tf.reshape(rnn_net, (-1, self.rnn_unit_size))
+            if self.rnn_type == 'GRU':
+                rnn_cell = rnn.GRUCell(num_units=self.rnn_unit_size)
+                rnn_cell = rnn.DropoutWrapper(rnn_cell, output_keep_prob=0.8)
+                rnn_cell = rnn.MultiRNNCell(cells=[rnn_cell]*self.rnn_num_layers)
+                
+                self.rnn_init_state = rnn_cell.zero_state(batch_size=1, dtype=tf.float32)
+                rnn_net = tf.expand_dims(serial_net, axis=1)
+                
+                # rnn_tuple_state = tuple(tf.unstack(self.rnn_init_states_, axis=0))  # unstack by rnn layer
+                rnn_net, self.final_state = tf.nn.dynamic_rnn(rnn_cell, rnn_net, initial_state=self.rnn_init_state)
+                rnn_net = tf.reshape(rnn_net, [-1, self.rnn_unit_size])
             else:
                 # Multi RNN Cell is not yet implemented
                 self.lstm_cell = tf.nn.rnn_cell.LSTMCell(self.rnn_unit_size)
@@ -173,7 +167,7 @@ class ActorCritic:
                 # self.final_state = (lstm_c[:1, :], lstm_h[:1, :])
                 rnn_net = tf.reshape(rnn_net, (-1, self.rnn_unit_size))
 
-            net = rnn_net + serial_net
+            net = rnn_net #+ serial_net
             net = layers.fully_connected(net, self.serial_size)
             self.logit = layers.fully_connected(net,
                                                 self.action_size,
@@ -232,7 +226,7 @@ class ActorCritic:
             # self.actor_loss = -tf.reduce_mean(tf.minimum(exp_v_a, exp_v_b), name='actor_loss') - self.entropy_beta * self.entropy
             obj_func = tf.log(tf.reduce_sum(self.action * self.actions_OH, 1))
             exp_v = obj_func * self.advantage_ # * self.mask_flat  # * self.likelihood_
-            self.actor_loss = tf.reduce_mean(-exp_v, name='actor_loss') - self.entropy_beta * self.entropy
+            self.actor_loss = tf.reduce_mean(-exp_v, name='actor_loss')# - self.entropy_beta * self.entropy
 
             # Total Loss
             self.total_loss = self.critic_beta * self.critic_loss + self.actor_loss
@@ -313,6 +307,7 @@ class ActorCritic:
         action_prob, critic, final_state = self.sess.run(
             [self.action, self.critic, self.final_state], feed_dict)
         action = [np.random.choice(self.action_size, p=prob / sum(prob)) for prob in action_prob]
+        
         return action, critic.tolist(), final_state
 
     def feed_backward(self, states, actions, td_targets, advantages, rnn_init_states, seq_lens, retrace_lambda=None, loss_mask=1.0):
@@ -366,15 +361,3 @@ class ActorCritic:
 
     def pull_global(self):
         self.sess.run(self.pull_ops)
-
-    def get_lstm_initial(self, batch_size=1):
-        if self.rnn_type == 'GRU':
-            # 1 for gru state number
-            init_state = np.zeros((self.rnn_num_layers, batch_size, self.rnn_unit_size))
-        else:
-            init_state = (np.zeros([self.rnn_num_layers, 1, self.lstm_cell.state_size.c]),
-                          np.zeros([self.rnn_num_layers, 1, self.lstm_cell.state_size.h]))
-            # c_init = np.zeros((self.rnn_num_layers, 1, self.lstm_cell.state_size.c), np.float32)
-            # h_init = np.zeros((self.rnn_num_layers, 1, self.lstm_cell.state_size.h), np.float32)
-            # init_state = [c_init, h_init]
-        return init_state
