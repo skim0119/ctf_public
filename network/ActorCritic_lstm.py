@@ -31,7 +31,7 @@ class ActorCritic:
                  sess=None,
                  global_network=None,
                  separate_train=False,
-                 sequence_maxlen=8
+                 rnn_type='GRU'
                  ):
         """ Initialize AC network
 
@@ -71,14 +71,13 @@ class ActorCritic:
         self.entropy_beta = entropy_beta
         self.global_network = global_network
         self.separate_train = separate_train
-        self.sequence_maxlen = sequence_maxlen
 
         # Input/Output
         self.input_tag = self.scope + '/Forward_input/state'
         self.output_tag = self.scope + '/actor/action'
 
         # RNN Configurations
-        self.rnn_type = 'LSTM'
+        self.rnn_type = rnn_type
         self.serial_size = 256  # length of the serial layer (between conv and rnn)
         self.rnn_unit_size = 256  # RNN number of hidden nodes
         self.rnn_num_layers = 1  # RNN number of layers
@@ -136,14 +135,17 @@ class ActorCritic:
                                 padding='SAME')
             serial_net = layers.flatten(net)
             serial_net = layers.fully_connected(serial_net, self.serial_size, activation_fn=tf.nn.elu)
-            #serial_net = layers.layer_norm(serial_net)
+            # serial_net = layers.layer_norm(serial_net)
 
             # Recursive Network
             rnn_net = tf.expand_dims(serial_net, [0])
-            if self.rnn_type == 'GRU':
-                #rnn_cells = tf.contrib.cudnn_rnn.CudnnGRU(self.rnn_num_layers, self.rnn_unit_size)
-                #rnn_net, self.final_state = rnn_cells(rnn_net)
-                #rnn_cell = rnn.DropoutWrapper(rnn_cell, output_keep_prob=0.8)
+            if self.rnn_type == 'CudnnGRU':
+                # Need more search
+                rnn_cells = tf.contrib.cudnn_rnn.CudnnGRU(self.rnn_num_layers, self.rnn_unit_size)
+                rnn_net, self.final_state = rnn_cells(rnn_net)
+                pass
+            elif self.rnn_type == 'GRU':
+                # rnn_cell = rnn.DropoutWrapper(rnn_cell, output_keep_prob=0.8)
                 rnn_cells = rnn.MultiRNNCell([rnn.GRUCell(self.rnn_unit_size) for _ in range(self.rnn_num_layers)])
                 rnn_tuple_state = tuple(tf.unstack(self.rnn_init_states_, axis=0))  # unstack by rnn layer
                 rnn_net, self.final_state = tf.nn.dynamic_rnn(rnn_cells,
@@ -155,10 +157,10 @@ class ActorCritic:
             else:
                 # Multi RNN Cell is not yet implemented
                 self.lstm_cell = tf.nn.rnn_cell.LSTMCell(self.rnn_unit_size)
-                #self.lstm_cell = rnn.DropoutWrapper(self.lstm_cell, output_keep_prob=0.8)
-                #self.lstm_cells = rnn.MultiRNNCell([self.lstm_cell for _ in range(self.rnn_num_layers)])
-                self.rnn_init_states_ = self.lstm_cell.zero_state(batch_size, tf.float32)  # placeholder
-                #rnn_tuple_state = tf.nn.rnn_cell.LSTMStateTuple(*tf.unstack(self.rnn_init_states_,axis=1)) # Multicell feature
+                self.lstm_cell = rnn.DropoutWrapper(self.lstm_cell, output_keep_prob=0.8)
+                self.lstm_cells = rnn.MultiRNNCell([self.lstm_cell for _ in range(self.rnn_num_layers)])
+                self.rnn_init_states_ = self.lstm_cells.zero_state(batch_size, tf.float32)  # placeholder
+                # rnn_tuple_state = tf.nn.rnn_cell.LSTMStateTuple(*tf.unstack(self.rnn_init_states_,axis=1)) # Multicell feature
                 rnn_net, lstm_state = tf.nn.dynamic_rnn(self.lstm_cell,
                                                         rnn_net,
                                                         initial_state=self.rnn_init_states_,
@@ -178,22 +180,6 @@ class ActorCritic:
                                                 activation_fn=None,
                                                 )
             self.action = tf.nn.softmax(self.logit, name='action')
-
-            # ------------------------------------------------------------------------------------
-            # lstm_cell = tf.nn.rnn_cell.LSTMCell(rnn_hidden_size1)
-            # self.rnn_serial_length = tf.placeholder(tf.int32)
-            # self.rnn_batch_size = tf.placeholder(tf.int32, shape=[])
-            # self.rnn_state_in = lstm_cell.zero_state(
-            #     self.rnn_batch_size, tf.float32)  # Placeholder
-            # # rnn_state_input = tf.contrib.rnn.LSTMStateTuple(*tf.unstack(self.rnn_state_in,axis=0)) # Multicell feature
-            # # lstm_cell = tf.nn.rnn_cell.MultiRNNCell([lstm_cell] * rnn_multi_layer)
-            # rnn_net, self.rnn_state = tf.nn.dynamic_rnn(cell=lstm_cell,
-            #                                             inputs=rnn_net,
-            #                                             sequence_length=self.rnn_serial_length,
-            #                                             initial_state=self.rnn_state_in,
-            #                                             time_major=False
-            #                                             )
-            # net = tf.reshape(rnn_net, [-1, rnn_hidden_size1])
 
         with tf.variable_scope('critic'):
             critic_net = self.state_input_
@@ -376,8 +362,9 @@ class ActorCritic:
             # 1 for gru state number
             init_state = np.zeros((self.rnn_num_layers, batch_size, self.rnn_unit_size))
         else:
-            init_state = (np.zeros([1,self.lstm_cell.state_size.c]),np.zeros([1,self.lstm_cell.state_size.h]))
-            #c_init = np.zeros((self.rnn_num_layers, 1, self.lstm_cell.state_size.c), np.float32)
-            #h_init = np.zeros((self.rnn_num_layers, 1, self.lstm_cell.state_size.h), np.float32)
-            #init_state = [c_init, h_init]
+            init_state = (np.zeros([self.rnn_num_layers, 1, self.lstm_cell.state_size.c]),
+                          np.zeros([self.rnn_num_layers, 1, self.lstm_cell.state_size.h]))
+            # c_init = np.zeros((self.rnn_num_layers, 1, self.lstm_cell.state_size.c), np.float32)
+            # h_init = np.zeros((self.rnn_num_layers, 1, self.lstm_cell.state_size.h), np.float32)
+            # init_state = [c_init, h_init]
         return init_state
