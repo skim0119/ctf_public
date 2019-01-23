@@ -1,449 +1,264 @@
-"""
-A simple version of Proximal Policy Optimization (PPO) using single thread and an LSTM layer.
-
-Based on:
-1. Emergence of Locomotion Behaviours in Rich Environments (Google Deepmind): [https://arxiv.org/abs/1707.02286]
-2. Proximal Policy Optimization Algorithms (OpenAI): [https://arxiv.org/abs/1707.06347]
-3. Generalized Advantage Estimation [https://arxiv.org/abs/1506.02438]
-"""
-
+""" Proximal Policy Optimization (PPO) + LSTM layer """
 import tensorflow as tf
+import tensorflow.layers as layers
+
 import numpy as np
-import gym
-import gym_cap
-import os
-import scipy.signal
-from gym import wrappers
-from datetime import datetime
-from time import time
 
-import policy.zeros
 from utility.dataModule import one_hot_encoder_v2 as one_hot_encoder
+from utility.utils import discount_rewards
 
-OUTPUT_RESULTS_DIR = "./model/"
+# Network configuration
+SERIAL_SIZE = 256
+RNN_UNIT_SIZE = 256
+RNN_NUM_LAYERS = 1
 
-EP_MAX = 100000
-GAMMA = 0.98
-LAMBDA = 0.95
-ENTROPY_BETA = 0.01  # 0.01 for discrete, 0.0 for continuous
-LR = 1e-4
-BATCH = 8192
-MINIBATCH = 32
-EPOCHS = 10
-EPSILON = 0.1
-VF_COEFF = 1.0
-L2_REG = 0.001
-LSTM_UNITS = 256
-LSTM_LAYERS = 1
-KEEP_PROB = 0.8
-SIGMA_FLOOR = 0.1  # Useful to set this to a non-zero number since the LSTM can make sigma drop too quickly
+MINIBATCH_SIZE = 8
+L2_REGULARIZATION = 0.001
 
-# MODEL_RESTORE_PATH = "/path/to/saved/model"
-MODEL_RESTORE_PATH = None
 
-class RunningStats(object):
-    # https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Parallel_algorithm
-    # https://github.com/openai/baselines/blob/master/baselines/common/running_mean_std.py
-    def __init__(self, epsilon=1e-4, shape=()):
-        self.mean = np.zeros(shape, 'float64')
-        self.var = np.ones(shape, 'float64')
-        self.std = np.ones(shape, 'float64')
-        self.count = epsilon
+class PPO:
+    """ Proximal Policy Optimization with LSTM (TensorFlow)
 
-    def update(self, x):
-        batch_mean = np.mean(x, axis=0)
-        batch_var = np.var(x, axis=0)
-        batch_count = x.shape[0]
-        self.update_from_moments(batch_mean, batch_var, batch_count)
+    Module contains network structure and pipeline for Actor-Critic.
+    Pipeline structure support asynchronous training.
+    Network includes CNN, FC, and RNN (GRU) layers.
+    """
 
-    def update_from_moments(self, batch_mean, batch_var, batch_count):
-        delta = batch_mean - self.mean
-        new_mean = self.mean + delta * batch_count / (self.count + batch_count)
-        m_a = self.var * self.count
-        m_b = batch_var * batch_count
-        M2 = m_a + m_b + np.square(delta) * self.count * batch_count / (self.count + batch_count)
-        new_var = M2 / (self.count + batch_count)
+    def __init__(self,
+                 in_size,
+                 action_size,
+                 scope,
+                 lr_actor=1e-4,
+                 lr_critic=1e-4,
+                 grad_clip_norm=0,
+                 global_step=None,
+                 critic_beta=1.0,
+                 entropy_beta=0.01,
+                 sess=None,
+                 global_network=None,
+                 separate_train=False,
+                 rnn_type='GRU'
+                 ):
+        # Class Environment
+        self.sess = sess
 
-        self.mean = new_mean
-        self.var = new_var
-        self.std = np.maximum(np.sqrt(self.var), 1e-6)
-        self.count = batch_count + self.count
+        # Parameters & Configs
+        self.in_size = in_size
+        self.action_size = action_size
+        self.scope = scope
+        self.lr_actor = lr_actor
+        self.lr_critic = lr_critic
+        self.grad_clip_norm = grad_clip_norm
+        self.global_step = global_step
+        self.critic_beta = critic_beta
+        self.entropy_beta = entropy_beta
+        self.global_network = global_network
+        self.separate_train = separate_train
 
-class PPO(object):
-    def __init__(self, environment, summary_dir="./logs/singleThreadLSTM", gpu=False):
-        # os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-        config = tf.ConfigProto(log_device_placement=False, device_count={'GPU': gpu})
-        config.gpu_options.per_process_gpu_memory_fraction = 0.1
+        # Input/Output
+        self.input_tag = self.scope + '/Forward_input/state'
+        self.output_tag = self.scope + '/actor/action'
 
-        self.actions = tf.placeholder(tf.int32, [None, 1], 'action')
-        self.actions_OH = tf.one_hot(self.actions, 5)
-        self.sess = tf.Session(config=config)
-        self.state = tf.placeholder(tf.float32, [None, 19, 19, 11], 'state')
-        self.advantage = tf.placeholder(tf.float32, [None, 1], 'advantage')
-        self.rewards = tf.placeholder(tf.float32, [None, 1], 'discounted_r')
-        self.keep_prob = tf.placeholder(tf.float32, name='dropout_keep_prob')
+        # RNN Configurations
+        self.rnn_type = rnn_type
 
+        with tf.variable_scope(self.scope):
+            self._build_placeholders()
+            self._build_dataset()
+            # Target Network
+            self.policy_target, self.policy_target_params, _, _ = self._build_actor_network(
+                self.batch['state'], 'actor_target', batch_size=MINIBATCH_SIZE)
+            self.value_target, self.value_target_params, _, _ = self._build_critic_network(
+                self.batch['state'], 'value_target', batch_size=MINIBATCH_SIZE)
+            # Policy Network for Backpropagation
+            self.actions, self.actions_params, self.action_init_state, self.action_fin_state = self._build_actor_network(
+                self.batch["state"], 'actor', batch_size=MINIBATCH_SIZE)
+            self.critics, self.critics_params, self.critic_init_state, self.critic_fin_state = self._build_critic_network(
+                self.batch["state"], 'critic', batch_size=MINIBATCH_SIZE)
+            # Policy Network for Action Generation (batch_size=1)
+            self.action_eval, _, self.action_eval_init_state, self.action_eval_fin_state = self._build_actor_network(self.state, 'actor', reuse=True)
+            self.critic_eval, _, self.critic_eval_init_state, self.critic_eval_fin_state = self._build_critic_network(
+                self.state, 'critic', reuse=True)
+            if scope != 'global':
+                loss_sum = self._build_losses()
+                grad_sum = self._build_pipeline()
+
+        self.stoch_action = tf.squeeze(self.action_eval.sample(1), axis=0, name="sample_action")
+        self.determ_action = self.action_eval.mode()
+        self.params = self.actions_params + self.critics_params
+        self.target_params = self.policy_target + self.value_target
+
+        if scope != 'global':
+            self.summary_ = tf.summary.merge(loss_sum, grad_sum)
+
+    def _build_dataset(self):
         # Use the TensorFlow Dataset API
-        self.dataset = tf.data.Dataset.from_tensor_slices({"state": self.state, "actions": self.actions,
-                                                           "rewards": self.rewards, "advantage": self.advantage})
-        self.dataset = self.dataset.batch(MINIBATCH, drop_remainder=True)
+        self.dataset = tf.data.Dataset.from_tensor_slices({"state": self.state_,
+                                                           "actions": self.actions_,
+                                                           "rewards": self.rewards_,
+                                                           "advantage": self.advantages_})
+        self.dataset = self.dataset.batch(MINIBATCH_SIZE, drop_remainder=True)
         self.iterator = self.dataset.make_initializable_iterator()
-        batch = self.iterator.get_next()
-        self.global_step = tf.train.get_or_create_global_step()
+        self.batch = self.iterator.get_next()
 
-        # Create an old & new policy function but also
-        # make separate value & policy functions for evaluation & training (with shared variables) ??
-        ## Old Network (Target)
-        pi_old, pi_old_params, _, _ = self._build_anet(batch["state"], 'oldpi')
-        vf_old, vf_old_params, _, _ = self._build_cnet(batch["state"], "oldvf")
+    def _build_placeholders(self):
+        """ Define the placeholders for forward and back propagation """
+        self.state_ = tf.placeholder(tf.float32, self.in_size, 'state')
+        self.actions_ = tf.placeholder(tf.int32, [None, 1], 'action')
+        self.actions_OH = tf.one_hot(self.actions, self.action_size)
 
-        ## Policy Network for Backpropagation
-        pi, pi_params, self.pi_i_state, self.pi_f_state = self._build_anet(batch["state"], 'pi')
-        self.v, vf_params, self.vf_i_state, self.vf_f_state = self._build_cnet(batch["state"], "vf")
+        self.advantages_ = tf.placeholder(tf.float32, [None, 1], 'advantage')
+        self.rewards_ = tf.placeholder(tf.float32, [None, 1], 'discounted_r')
+        self.keep_prob_ = tf.placeholder_with_default(tf.constant(0.8), shape=None)
 
-        ## Policy Network for Action Generation (batch_size=1)
-        pi_eval, _, self.pi_eval_i_state, self.evalpi_f_state = self._build_anet(self.state, 'pi', reuse=True, batch_size=1)
-        self.vf_eval, _, self.vf_eval_i_state, self.vf_eval_f_state = self._build_cnet(self.state, 'vf', reuse=True, batch_size=1)
+        self.likelihood_ = tf.placeholder(shape=[None], dtype=tf.float32, name='likelihood_holder')
+        self.likelihood_cumprod_ = tf.placeholder(shape=[None], dtype=tf.float32, name='likelihood_cumprod_holder')
 
-        self.sample_op = tf.squeeze(pi_eval.sample(1), axis=0, name="sample_action")  # Deterministic
-        self.eval_action = pi_eval.mode()  # Used mode for discrete case. Mode should equal mean in continuous # Stochastic
-
-        self.saver = tf.train.Saver()  # set max_to+keep to keep older checkpoints
-
-        with tf.variable_scope('loss'):
-            epsilon_decay = tf.train.polynomial_decay(EPSILON, self.global_step, 1e6, 0.01, power=0.0)
-
-            with tf.variable_scope('policy'):
-                # Use floor functions for the probabilities to prevent NaNs when prob = 0
-                ratio = tf.maximum(pi.prob(batch["actions"]), 1e-13) / tf.maximum(pi_old.prob(batch["actions"]), 1e-13)
-                ratio = tf.clip_by_value(ratio, 0, 10)  # ??
-                surr1 = batch["advantage"] * ratio
-                surr2 = batch["advantage"] * tf.clip_by_value(ratio, 1 - epsilon_decay, 1 + epsilon_decay)
-                loss_pi = -tf.reduce_mean(tf.minimum(surr1, surr2))
-                tf.summary.scalar("loss", loss_pi)
-
-            with tf.variable_scope('value_function'):
-                clipped_value_estimate = vf_old + tf.clip_by_value(self.v - vf_old, -epsilon_decay, epsilon_decay)
-                loss_vf1 = tf.squared_difference(clipped_value_estimate, batch["rewards"])
-                loss_vf2 = tf.squared_difference(self.v, batch["rewards"])
-                loss_vf = tf.reduce_mean(tf.maximum(loss_vf1, loss_vf2)) * 0.5
-                # loss_vf = tf.reduce_mean(tf.square(self.v - batch["rewards"])) * 0.5
-                tf.summary.scalar("loss", loss_vf)
-
-            with tf.variable_scope('entropy'):
-                entropy = pi.entropy()
-                pol_entpen = -ENTROPY_BETA * tf.reduce_mean(entropy)
-
-            loss = loss_pi + loss_vf * VF_COEFF + pol_entpen
-            tf.summary.scalar("total", loss)
-            # tf.summary.scalar("epsilon", epsilon_decay)
-
-        with tf.variable_scope('train'):
-            opt = tf.train.AdamOptimizer(LR)
-            self.train_op = opt.minimize(loss, global_step=self.global_step, var_list=pi_params + vf_params)
-
-            # Gradient clipping
-            # grads, vs = zip(*opt.compute_gradients(loss, var_list=pi_params + vf_params))
-            # Need to split the two networks so that clip_by_global_norm works properly
-            # pi_grads, pi_vs = grads[:len(pi_params)], vs[:len(pi_params)]
-            # vf_grads, vf_vs = grads[len(pi_params):], vs[len(pi_params):]
-            # pi_grads, _ = tf.clip_by_global_norm(pi_grads, 10)
-            # vf_grads, _ = tf.clip_by_global_norm(vf_grads, 10)
-            # self.train_op = opt.apply_gradients(zip(pi_grads + vf_grads, pi_vs + vf_vs), global_step=self.global_step)
-
-            # for grad, var in zip(pi_grads + vf_grads, pi_vs + vf_vs):
-            #     tf.summary.histogram(var.name, grad)
-
-        with tf.variable_scope('update_old'):
-            self.update_pi_old_op = [oldp.assign(p) for p, oldp in zip(pi_params, pi_old_params)]
-            self.update_vf_old_op = [oldp.assign(p) for p, oldp in zip(vf_params, vf_old_params)]
-
-        self.writer = tf.summary.FileWriter(summary_dir, self.sess.graph)
-        self.sess.run(tf.global_variables_initializer())
-
-        tf.summary.scalar("value", tf.reduce_mean(self.v))
-        tf.summary.scalar("policy_entropy", tf.reduce_mean(entropy))
-        self.summarise = tf.summary.merge(tf.get_collection(tf.GraphKeys.SUMMARIES))
-
-    def _build_anet(self, state_in, name, reuse=False, batch_size=MINIBATCH):
+    def _build_actor_network(self, state_in, name, reuse=False, batch_size=1):
         w_reg = None
 
         with tf.variable_scope(name, reuse=reuse):
-            conv1 = tf.layers.conv2d(inputs=state_in, filters=32, kernel_size=8, strides=4, activation=tf.nn.relu, padding='SAME')
-            conv2 = tf.layers.conv2d(inputs=conv1, filters=32, kernel_size=4, strides=2, activation=tf.nn.relu, padding='SAME')
-            conv3 = tf.layers.conv2d(inputs=conv2, filters=64, kernel_size=2, strides=1, activation=tf.nn.relu, padding='SAME')
-            state_in = tf.layers.flatten(conv3)
+            cnn_net = layers.conv2d(inputs=state_in, filters=32, kernel_size=8, strides=4, activation=tf.nn.relu, padding='SAME')
+            cnn_net = layers.conv2d(inputs=cnn_net, filters=32, kernel_size=4, strides=2, activation=tf.nn.relu, padding='SAME')
+            cnn_net = layers.conv2d(inputs=cnn_net, filters=64, kernel_size=2, strides=1, activation=tf.nn.relu, padding='SAME')
+            serial_net = layers.flatten(cnn_net)
 
-            l1 = tf.layers.dense(state_in, 400, tf.nn.relu, kernel_regularizer=w_reg, name="pi_l1")
-            l2 = tf.layers.dense(l1, LSTM_UNITS, tf.nn.relu, kernel_regularizer=w_reg, name="pi_l2")
+            serial_net = layers.dense(serial_net, SERIAL_SIZE, tf.nn.relu, kernel_regularizer=w_reg)
+            serial_net = layers.dense(serial_net, SERIAL_SIZE, tf.nn.relu, kernel_regularizer=w_reg)
 
             # LSTM layer
-            a_lstm = tf.nn.rnn_cell.LSTMCell(num_units=LSTM_UNITS, name='basic_lstm_cell')
-            a_lstm = tf.nn.rnn_cell.DropoutWrapper(a_lstm, output_keep_prob=self.keep_prob)
-            a_lstm = tf.nn.rnn_cell.MultiRNNCell(cells=[a_lstm] * LSTM_LAYERS)
+            lstm = tf.nn.rnn_cell.LSTMCell(num_units=RNN_UNIT_SIZE, name='lstm_cell')
+            lstm = tf.nn.rnn_cell.DropoutWrapper(lstm, output_keep_prob=self.keep_prob_)
+            lstm = tf.nn.rnn_cell.MultiRNNCell([lstm] * RNN_NUM_LAYERS)
 
-            a_init_state = a_lstm.zero_state(batch_size=batch_size, dtype=tf.float32)
-            lstm_in = tf.expand_dims(l2, axis=1)
+            init_state = lstm.zero_state(batch_size=batch_size, dtype=tf.float32)
+            lstm_in = tf.expand_dims(serial_net, axis=1)
 
-            a_outputs, a_final_state = tf.nn.dynamic_rnn(cell=a_lstm, inputs=lstm_in, initial_state=a_init_state)
-            a_cell_out = tf.reshape(a_outputs, [-1, LSTM_UNITS], name='flatten_lstm_outputs')
+            rnn_net, final_state = tf.nn.dynamic_rnn(cell=lstm, inputs=lstm_in, initial_state=init_state)
+            rnn_net = tf.reshape(rnn_net, [-1, RNN_UNIT_SIZE], name='flatten_rnn_outputs')
 
-            a_logits = tf.layers.dense(a_cell_out, 5, kernel_regularizer=w_reg, name="pi_logits")
-            dist = tf.distributions.Categorical(logits=a_logits)
+            logits = layers.dense(rnn_net, 5, kernel_regularizer=w_reg, name="pi_logits")
+            policy_dist = tf.distributions.Categorical(logits=logits)
 
-        params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=name)
-        return dist, params, a_init_state, a_final_state
+        params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=self.scope + '/' + name)
+        return policy_dist, params, init_state, final_state
 
-    def _build_cnet(self, state_in, name, reuse=False, batch_size=MINIBATCH):
-        w_reg = tf.contrib.layers.l2_regularizer(L2_REG)
+    def _build_critic_network(self, state_in, name, reuse=False, batch_size=1):
+        w_reg = tf.contrib.layers.l2_regularizer(L2_REGULARIZATION)
 
         with tf.variable_scope(name, reuse=reuse):
-            conv1 = tf.layers.conv2d(inputs=state_in, filters=32, kernel_size=8, strides=4, activation=tf.nn.relu, padding='SAME')
-            conv2 = tf.layers.conv2d(inputs=conv1, filters=32, kernel_size=4, strides=2, activation=tf.nn.relu, padding='SAME')
-            conv3 = tf.layers.conv2d(inputs=conv2, filters=64, kernel_size=2, strides=1, activation=tf.nn.relu, padding='SAME')
-            state_in = tf.layers.flatten(conv3)
+            cnn_net = layers.conv2d(inputs=state_in, filters=32, kernel_size=8, strides=4, activation=tf.nn.relu, padding='SAME')
+            cnn_net = layers.conv2d(inputs=cnn_net, filters=32, kernel_size=4, strides=2, activation=tf.nn.relu, padding='SAME')
+            cnn_net = layers.conv2d(inputs=cnn_net, filters=64, kernel_size=2, strides=1, activation=tf.nn.relu, padding='SAME')
+            serial_net = layers.flatten(cnn_net)
 
-            l1 = tf.layers.dense(state_in, 400, tf.nn.relu, kernel_regularizer=w_reg, name="vf_l1")
-            l2 = tf.layers.dense(l1, LSTM_UNITS, tf.nn.relu, kernel_regularizer=w_reg, name="vf_l2")
+            serial_net = layers.dense(serial_net, SERIAL_SIZE, tf.nn.relu, kernel_regularizer=w_reg)
+            serial_net = layers.dense(serial_net, SERIAL_SIZE, tf.nn.relu, kernel_regularizer=w_reg)
 
             # LSTM layer
-            c_lstm = tf.nn.rnn_cell.LSTMCell(num_units=LSTM_UNITS, name='basic_lstm_cell')
-            c_lstm = tf.nn.rnn_cell.DropoutWrapper(c_lstm, output_keep_prob=self.keep_prob)
-            c_lstm = tf.nn.rnn_cell.MultiRNNCell([c_lstm] * LSTM_LAYERS)
+            lstm = tf.nn.rnn_cell.LSTMCell(num_units=RNN_UNIT_SIZE, name='lstm_cell')
+            lstm = tf.nn.rnn_cell.DropoutWrapper(lstm, output_keep_prob=self.keep_prob_)
+            lstm = tf.nn.rnn_cell.MultiRNNCell([lstm] * RNN_NUM_LAYERS)
 
-            c_init_state = c_lstm.zero_state(batch_size=batch_size, dtype=tf.float32)
-            lstm_in = tf.expand_dims(l2, axis=1)
+            init_state = lstm.zero_state(batch_size=batch_size, dtype=tf.float32)
+            lstm_in = tf.expand_dims(serial_net, axis=1)
 
-            c_outputs, c_final_state = tf.nn.dynamic_rnn(cell=c_lstm, inputs=lstm_in, initial_state=c_init_state)
-            c_cell_out = tf.reshape(c_outputs, [-1, LSTM_UNITS], name='flatten_lstm_outputs')
+            rnn_net, final_state = tf.nn.dynamic_rnn(cell=lstm, inputs=lstm_in, initial_state=init_state)
+            rnn_net = tf.reshape(rnn_net, [-1, RNN_UNIT_SIZE], name='flatten_rnn_outputs')
 
-            vf = tf.layers.dense(c_cell_out, 1, kernel_regularizer=w_reg, name="vf_out")
+            critic = layers.dense(rnn_net, 1, kernel_regularizer=w_reg, name="critic_out")
 
-        params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=name)
-        return vf, params, c_init_state, c_final_state
+        params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=self.scope + '/' + name)
+        return critic, params, init_state, final_state
 
-    def save_model(self, model_path, step=None):
-        save_path = self.saver.save(self.sess, os.path.join(model_path, "model.ckpt"), global_step=step)
-        return save_path
+    def _build_losses(self):
+        epsilon = 0.1
+        with tf.variable_scope('loss'):
+            self.global_step = tf.train.get_or_create_global_step()
+            epsilon_decay = tf.train.polynomial_decay(epsilon, self.global_step, 1e6, 0.01, power=0.0)
 
-    def restore_model(self, model_path):
-        self.saver.restore(self.sess, os.path.join(model_path, "model.ckpt"))
-        print("Model restored from", model_path)
+            with tf.variable_scope('actor'):
+                ratio = tf.maximum(self.actions.prob(self.batch["actions"]), 1e-13) / \
+                    tf.maximum(self.policy_target.prob(self.batch["actions"]), 1e-13)
+                ratio = tf.clip_by_value(ratio, 0, 10)
+                ppo1 = self.batch["advantage"] * ratio
+                ppo2 = self.batch["advantage"] * tf.clip_by_value(ratio, 1 - epsilon_decay, 1 + epsilon_decay)
+                self.actor_loss = -tf.reduce_mean(tf.minimum(ppo1, ppo2))
 
-    def get_action(self, state, lstm_state, stochastic=True):
-        if stochastic:
-            eval_ops = [self.sample_op, self.vf_eval, self.evalpi_f_state, self.vf_eval_f_state]
-        else:
-            eval_ops = [self.eval_action, self.vf_eval, self.evalpi_f_state, self.vf_eval_f_state]
+            with tf.variable_scope('critic'):
+                clipped_value_estimate = self.value_target + tf.clip_by_value(self.critics - self.value_target, -epsilon_decay, epsilon_decay)
+                critic_v1 = tf.squared_difference(clipped_value_estimate, self.batch["rewards"])
+                critic_v2 = tf.squared_difference(self.critics, self.batch["rewards"])
+                self.critic_loss = tf.reduce_mean(tf.maximum(critic_v1, critic_v2))
+                # critic_loss= tf.reduce_mean(tf.square(self.critics - self.batch["rewards"]))
 
+            with tf.variable_scope('entropy'):
+                self.entropy = self.actions.entropy()
+
+            self.total_loss = self.actor_loss + (self.critic_loss * self.critic_beta) - self.entropy * self.entropy_beta
+            summaries = []
+            summaries.append(tf.summary.scalar("epsilon", epsilon_decay))
+            summaries.append(tf.summary.scalar("total_loss", self.total_loss))
+            summaries.append(tf.summary.scalar("actor_loss", self.actor_loss))
+            summaries.append(tf.summary.scalar("critic_loss", self.critic_loss))
+            summaries.append(tf.summary.scalar("entropy", self.entropy))
+
+            return tf.summary.merge(summaries)
+
+    def _build_pipeline(self):
+        summaries = []
+        with tf.variable_scope('train'):
+            optimizer = tf.train.AdamOptimizer(self.lr_actor)
+            self.grads = optimizer.compute_gradients(self.total_loss, var_list=self.params)
+            self.train_op = optimizer.minimize(self.total_loss,
+                                               global_step=self.global_step,
+                                               var_list=self.params)
+
+            for grad, var in zip(self.grads):
+                var_name = var.name + '_grad'
+                var_name = var_name.replace(':', '_')
+                summaries.append(tf.summary.histogram(var_name, grad))
+
+        with tf.variable_scope('push'):
+            self.update_target_op = [target.assign(p) for p, target in zip(self.params, self.target_params)]
+
+        return tf.summary.merge(summaries)
+
+    def feed_forward(self, state, rnn_state):
+        eval_ops = [self.stoch_action, self.critic_eval, self.action_eval_fin_state, self.critic_eval_fin_state]
         feed_dict = {self.state: state[np.newaxis, :],
-                     self.pi_eval_i_state: lstm_state[0],
-                     self.vf_eval_i_state: lstm_state[1],
+                     self.action_eval_init_state: rnn_state[0],
+                     self.critic_eval_init_state: rnn_state[1],
                      self.keep_prob: 1.0}
 
-        action, value, a_state, c_state = self.sess.run(eval_ops, feed_dict)
-        return action[0], np.squeeze(value), (a_state, c_state)
+        action, value, a_fin_state, c_fin_state = self.sess.run(eval_ops, feed_dict)
+        return action[0], value[0], (a_fin_state, c_fin_state)
 
-    def update(self, episode_rollouts):
-        start, e_time = time(), []
-        self.sess.run([self.update_pi_old_op, self.update_vf_old_op])
+    def feed_backward(self, episode_rollouts, epochs=10):
+        self.sess.run([self.update_target_op])
 
-        for _ in range(EPOCHS):
+        for _ in range(epochs):
             np.random.shuffle(episode_rollouts)
             for ep_s, ep_a, ep_r, ep_adv in episode_rollouts:
+                feed_dict = {self.state_: ep_s,
+                             self.actions_: ep_a,
+                             self.rewards_: ep_r,
+                             self.advantage_: ep_adv}
+                self.sess.run(self.iterator.initializer, feed_dict=feed_dict)
 
-                self.sess.run(self.iterator.initializer, feed_dict={self.state: ep_s, self.actions: ep_a,
-                                                                    self.rewards: ep_r, self.advantage: ep_adv})
-
-                a_state, c_state = self.sess.run([self.pi_i_state, self.vf_i_state])
-                train_ops = [self.summarise, self.global_step, self.pi_f_state, self.vf_f_state, self.train_op]
+                a_state, c_state = self.sess.run([self.action_init_state, self.critic_init_state])
+                train_ops = [self.summary_, self.global_step, self.action_fin_state, self.critic_fin_state, self.train_op]
 
                 while True:  # run until batch run out
                     try:
-                        e_start = time()
-                        feed_dict = {self.pi_i_state: a_state, self.vf_i_state: c_state, self.keep_prob: KEEP_PROB}
+                        feed_dict = {self.action_init_state: a_state,
+                                     self.critic_init_state: c_state,
+                                     self.keep_prob: 0.8}
                         summary, step, a_state, c_state, _ = self.sess.run(train_ops, feed_dict=feed_dict)
-                        e_time.append(time() - e_start)
                     except tf.errors.OutOfRangeError:
                         break
-
-        print("Trained in %.3fs. Average %.3fs/minibatch. Global step %i" % (time() - start, np.mean(e_time), step))
         return summary
 
 
-def add_histogram(writer, tag, values, step, bins=1000):
-    """
-    Logs the histogram of a list/vector of values.
-    From: https://gist.github.com/gyglim/1f8dfb1b5c82627ae3efcfbbadb9f514
-    """
-
-    # Create histogram using numpy
-    counts, bin_edges = np.histogram(values, bins=bins)
-
-    # Fill fields of histogram proto
-    hist = tf.HistogramProto()
-    hist.min = float(np.min(values))
-    hist.max = float(np.max(values))
-    hist.num = int(np.prod(values.shape))
-    hist.sum = float(np.sum(values))
-    hist.sum_squares = float(np.sum(values ** 2))
-
-    # Requires equal number as bins, where the first goes from -DBL_MAX to bin_edges[1]
-    # See https://github.com/tensorflow/tensorflow/blob/master/tensorflow/core/framework/summary.proto#L30
-    # Therefore we drop the start of the first bin
-    bin_edges = bin_edges[1:]
-
-    # Add bin edges and counts
-    for edge in bin_edges:
-        hist.bucket_limit.append(edge)
-    for c in counts:
-        hist.bucket.append(c)
-
-    # Create and write Summary
-    summary = tf.Summary(value=[tf.Summary.Value(tag=tag, histo=hist)])
-    writer.add_summary(summary, step)
-
-
-def discount(x, gamma, terminal_array=None):
-    if terminal_array is None:
-        return scipy.signal.lfilter([1], [1, -gamma], x[::-1], axis=0)[::-1]
-    else:
-        y, adv = 0, []
-        terminals_reversed = terminal_array[1:][::-1]
-        for step, dt in enumerate(reversed(x)):
-            y = dt + gamma * y * (1 - terminals_reversed[step])
-            adv.append(y)
-        return np.array(adv)[::-1]
-
-
 if __name__ == '__main__':
-    ENVIRONMENT = 'cap-v0'
-
-    TIMESTAMP = datetime.now().strftime("%Y%m%d-%H%M%S")
-    SUMMARY_DIR = os.path.join("./logs/", "PPO_LSTM", ENVIRONMENT, TIMESTAMP)
-
-    env = gym.make(ENVIRONMENT)
-    ppo = PPO(env, SUMMARY_DIR, gpu=False)
-
-    if MODEL_RESTORE_PATH is not None:
-        ppo.restore_model(MODEL_RESTORE_PATH)
-
-    t, terminal = 0, False
-    buffer_s, buffer_a, buffer_r, buffer_v, buffer_terminal = [], [], [], [], []
-    experience, batch_rewards = [], []
-    rolling_r = RunningStats()
-
-    for episode in range(EP_MAX + 1):
-        # Initialization
-        lstm_state = ppo.sess.run([ppo.pi_eval_i_state, ppo.vf_eval_i_state])  # Zero LSTM state
-
-        s = env.reset(map_size=20, policy_red=policy.zeros.PolicyGen(env.get_map, env.get_team_red))
-        s = one_hot_encoder(env._env, env.get_team_blue, 9)[0]
-
-        ep_r, ep_t, ep_a = 0, 0, []
-        prev_r = 0
-        
-        while True:
-            a, v, lstm_state = ppo.get_action(s, lstm_state)
-
-            if terminal:
-                # Normalise rewards
-                rewards = np.array(buffer_r)
-                rewards = np.clip(rewards / rolling_r.std, -10, 10)
-                batch_rewards = batch_rewards + buffer_r
-
-                values = np.array(buffer_v + [v*(1-terminal)])  # v = 0 if terminal, otherwise use the predicted v
-                terminals = np.array(buffer_terminal + [terminal])
-
-                # Generalized Advantage Estimation - https://arxiv.org/abs/1506.02438
-                td_delta = rewards + GAMMA * values[1:] * (1 - terminals[1:]) - values[:-1]
-                advantage = discount(td_delta, GAMMA * LAMBDA, terminals)
-                returns = advantage + np.array(buffer_v)
-                # Per episode normalisation of advantages
-                # advantage = (advantage - advantage.mean()) / np.maximum(advantage.std(), 1e-6)
-
-                bs, ba, br, badv = np.reshape(buffer_s, (len(buffer_s),) + (19,19,11)), np.vstack(buffer_a), \
-                                   np.vstack(returns), np.vstack(advantage)
-                experience.append([bs, ba, br, badv])
-
-                buffer_s, buffer_a, buffer_r, buffer_v, buffer_terminal = [], [], [], [], []
-
-                # Update ppo
-                if t >= BATCH:
-                    # Per batch normalisation of advantages
-                    advs = np.concatenate(list(zip(*experience))[3])
-                    for x in experience:
-                        x[3] = (x[3] - np.mean(advs)) / np.maximum(np.std(advs), 1e-6)
-
-                    # Update rolling reward stats
-                    rolling_r.update(np.array(batch_rewards))
-
-                    print("Training using %i episodes and %i steps..." % (len(experience), t))
-                    graph_summary = ppo.update(experience)
-                    t, experience, batch_rewards = 0, [], []
-
-            buffer_s.append(s)
-            buffer_a.append(a)
-            buffer_v.append(v)
-            buffer_terminal.append(terminal)
-            ep_a.append(a)
-
-            s, rc, terminal, _ = env.step([a])
-            s = one_hot_encoder(env._env, env.get_team_blue, 9)[0]
-
-
-            r = rc - prev_r
-            if ep_t == 150 and terminal == False:
-                r = -100
-                rc = -100
-                terminal = True
-            r /= 100
-
-            buffer_r.append(r)
-
-            ep_r += r
-            ep_t += 1
-            t += 1
-            prev_r = rc
-
-            if terminal:
-                # End of episode summary
-                print('Episode: %i' % episode, "| Reward: %.2f" % ep_r, '| Steps: %i' % ep_t)
-
-                worker_summary = tf.Summary()
-                worker_summary.value.add(tag="Reward", simple_value=ep_r)
-
-
-                try:
-                    ppo.writer.add_summary(graph_summary, episode)
-                except NameError:
-                    pass
-                ppo.writer.add_summary(worker_summary, episode)
-                ppo.writer.flush()
-
-                # Save the model
-                if episode % 100 == 0 and episode > 0:
-                    path = ppo.save_model(SUMMARY_DIR, episode)
-                    print('Saved model at episode', episode, 'in', path)
-                break
-
-    env.close()
-
-    # Run trained policy
-    #env = gym.make(ENVIRONMENT)
-    #env = wrappers.Monitor(env, os.path.join(SUMMARY_DIR, ENVIRONMENT + "_trained"), video_callable=None)
-    #while True:
-    #    s = env.reset()
-    #    ep_r, ep_t = 0, 0
-    #    lstm_state = ppo.sess.run([ppo.pi_eval_i_state, ppo.vf_eval_i_state])
-    #    while True:
-    #        env.render()
-    #        a, v, lstm_state = ppo.get_action(s, lstm_state, stochastic=False)
-    #        if not ppo.discrete:
-    #            a = np.clip(a, env.action_space.low, env.action_space.high)
-    #        s, r, terminal, _ = env.step(a)
-    #        ep_r += r
-    #        ep_t += 1
-    #        if terminal:
-    #            print("Reward: %.2f" % ep_r, '| Steps: %i' % ep_t)
-    #            break
+    import gym
