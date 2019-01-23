@@ -1,5 +1,6 @@
 import numpy as np
 import random
+import scipy
 
 """Utility methods and classes used in CtF Problem
 
@@ -36,7 +37,7 @@ Todo:
 """
 
 
-def discount_rewards(rewards, gamma, normalize=False):
+def discount_rewards(rewards, gamma, normalize=False, mask_array=None):
     """ take 1D float numpy array of rewards and compute discounted reward
 
     Args:
@@ -49,18 +50,20 @@ def discount_rewards(rewards, gamma, normalize=False):
 
     """
 
-    disc_reward = np.zeros_like(rewards, dtype=np.float32)
-    cumulate_add = 0.0
-    for idx, reward in enumerate(reversed(rewards)):
-        cumulate_add = (cumulate_add * gamma + reward)
-        disc_reward[idx] = cumulate_add
+    if mask_array is None:
+        return scipy.signal.lfilter([1], [1, -gamma], rewards[::-1], axis=0)[::-1]
+    else:
+        y, adv = 0.0, []
+        mask_reverse = mask_array[1:][::-1]
+        for i, reward in enumerate(reversed(rewards)):
+            y = reward + gamma * y * (1 - mask_reverse[i])
+            adv.append(y)
+        disc_r = np.array(adv)[::-1]
 
-    if normalize:
-        disc_reward = (disc_reward - np.mean(disc_reward)) / (np.std(disc_reward)+1e-8)
-        
-    disc_reward = disc_reward[::-1]
+        if normalize:
+            disc_r = (disc_r - np.mean(disc_r)) / (np.std(disc_r) + 1e-13)
 
-    return disc_reward
+        return disc_r
 
 
 def normalize(r):
@@ -74,7 +77,7 @@ def normalize(r):
 
     """
 
-    return (r - np.mean(r)) / (np.std(r)+1e-13)  # small addition to avoid dividing by zero
+    return (r - np.mean(r)) / (np.std(r) + 1e-13)  # small addition to avoid dividing by zero
 
 
 def retrace(targets, behaviors, lambda_=0.2):
@@ -203,7 +206,7 @@ class Experience_buffer:
 
     def add(self, experience):
         if len(self.buffer) + len(experience) >= self.buffer_size:
-            self.buffer[0:(len(experience)+len(self.buffer))-self.buffer_size] = []
+            self.buffer[0:(len(experience) + len(self.buffer)) - self.buffer_size] = []
         self.buffer.extend(experience)
 
     def add_element(self, sample):
