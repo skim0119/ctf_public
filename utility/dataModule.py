@@ -32,7 +32,7 @@ def one_hot_encoder(state, agents, vision_radius=9, reverse=False):
 
     vision_lx = 2*vision_radius+1
     vision_ly = 2*vision_radius+1
-    oh_state = np.zeros((len(agents),vision_lx,vision_ly,6))
+    oh_state = np.zeros((len(agents),vision_lx,vision_ly,6), np.float)
 
     # team 1 : (1), team 2 : (-1), map elements: (0)
     map_channel = {UNKNOWN:0, DEAD:0,
