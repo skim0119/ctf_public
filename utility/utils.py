@@ -74,7 +74,7 @@ def normalize(r):
 
     """
 
-    return (r - np.mean(r)) / (np.std(r)+1e-8)  # small addition to avoid dividing by zero
+    return (r - np.mean(r)) / (np.std(r)+1e-13)  # small addition to avoid dividing by zero
 
 
 def retrace(targets, behaviors, lambda_=0.2):
