@@ -54,7 +54,7 @@ def discount_rewards(rewards, gamma, normalize=False, mask_array=None):
         return scipy.signal.lfilter([1], [1, -gamma], rewards[::-1], axis=0)[::-1]
     else:
         y, adv = 0.0, []
-        mask_reverse = mask_array[1:][::-1]
+        mask_reverse = mask_array[::-1]
         for i, reward in enumerate(reversed(rewards)):
             y = reward + gamma * y * (1 - mask_reverse[i])
             adv.append(y)
