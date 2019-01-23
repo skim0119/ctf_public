@@ -10,10 +10,18 @@ from utility.utils import discount_rewards
 # Network configuration
 SERIAL_SIZE = 256
 RNN_UNIT_SIZE = 256
-RNN_NUM_LAYERS = 1
+RNN_NUM_LAYERS = 3
 
 MINIBATCH_SIZE = 8
 L2_REGULARIZATION = 0.001
+
+
+def normalized_columns_initializer(std=1.0):
+    def _initializer(shape, dtype=None, partition_info=None):
+        out = np.random.randn(*shape).astype(np.float32)
+        out *= std / np.sqrt(np.square(out).sum(axis=0, keepdims=True))
+        return tf.constant(out)
+    return _initializer
 
 
 class PPO:
@@ -69,27 +77,27 @@ class PPO:
             self.policy_target, self.policy_target_params, _, _ = self._build_actor_network(
                 self.batch['state'], 'actor_target', batch_size=MINIBATCH_SIZE)
             self.value_target, self.value_target_params, _, _ = self._build_critic_network(
-                self.batch['state'], 'value_target', batch_size=MINIBATCH_SIZE)
+                self.batch['state'], 'critic_target', batch_size=MINIBATCH_SIZE)
             # Policy Network for Backpropagation
             self.actions, self.actions_params, self.action_init_state, self.action_fin_state = self._build_actor_network(
                 self.batch["state"], 'actor', batch_size=MINIBATCH_SIZE)
             self.critics, self.critics_params, self.critic_init_state, self.critic_fin_state = self._build_critic_network(
                 self.batch["state"], 'critic', batch_size=MINIBATCH_SIZE)
             # Policy Network for Action Generation (batch_size=1)
-            self.action_eval, _, self.action_eval_init_state, self.action_eval_fin_state = self._build_actor_network(self.state, 'actor', reuse=True)
+            self.action_eval, _, self.action_eval_init_state, self.action_eval_fin_state = self._build_actor_network(self.state_, 'actor', reuse=True)
             self.critic_eval, _, self.critic_eval_init_state, self.critic_eval_fin_state = self._build_critic_network(
-                self.state, 'critic', reuse=True)
+                self.state_, 'critic', reuse=True)
+            self.stoch_action = tf.squeeze(self.action_eval.sample(1), axis=0, name="sample_action")
+            self.determ_action = self.action_eval.mode()
+            self.params = self.actions_params + self.critics_params
+            self.target_params = self.policy_target_params + self.value_target_params
             if scope != 'global':
                 loss_sum = self._build_losses()
                 grad_sum = self._build_pipeline()
 
-        self.stoch_action = tf.squeeze(self.action_eval.sample(1), axis=0, name="sample_action")
-        self.determ_action = self.action_eval.mode()
-        self.params = self.actions_params + self.critics_params
-        self.target_params = self.policy_target + self.value_target
 
         if scope != 'global':
-            self.summary_ = tf.summary.merge(loss_sum, grad_sum)
+            self.summary_ = tf.summary.merge([loss_sum, grad_sum])
 
     def _build_dataset(self):
         # Use the TensorFlow Dataset API
@@ -105,11 +113,10 @@ class PPO:
         """ Define the placeholders for forward and back propagation """
         self.state_ = tf.placeholder(tf.float32, self.in_size, 'state')
         self.actions_ = tf.placeholder(tf.int32, [None, 1], 'action')
-        self.actions_OH = tf.one_hot(self.actions, self.action_size)
 
         self.advantages_ = tf.placeholder(tf.float32, [None, 1], 'advantage')
         self.rewards_ = tf.placeholder(tf.float32, [None, 1], 'discounted_r')
-        self.keep_prob_ = tf.placeholder_with_default(tf.constant(0.8), shape=None)
+        self.keep_prob_ = tf.placeholder_with_default(tf.constant(1.0), shape=None)
 
         self.likelihood_ = tf.placeholder(shape=[None], dtype=tf.float32, name='likelihood_holder')
         self.likelihood_cumprod_ = tf.placeholder(shape=[None], dtype=tf.float32, name='likelihood_cumprod_holder')
@@ -118,16 +125,11 @@ class PPO:
         w_reg = None
 
         with tf.variable_scope(name, reuse=reuse):
-            cnn_net = layers.conv2d(inputs=state_in, filters=32, kernel_size=8, strides=4, activation=tf.nn.relu, padding='SAME')
-            cnn_net = layers.conv2d(inputs=cnn_net, filters=32, kernel_size=4, strides=2, activation=tf.nn.relu, padding='SAME')
-            cnn_net = layers.conv2d(inputs=cnn_net, filters=64, kernel_size=2, strides=1, activation=tf.nn.relu, padding='SAME')
-            serial_net = layers.flatten(cnn_net)
-
-            serial_net = layers.dense(serial_net, SERIAL_SIZE, tf.nn.relu, kernel_regularizer=w_reg)
-            serial_net = layers.dense(serial_net, SERIAL_SIZE, tf.nn.relu, kernel_regularizer=w_reg)
+            serial_net = layers.flatten(state_in)
 
             # LSTM layer
             lstm = tf.nn.rnn_cell.LSTMCell(num_units=RNN_UNIT_SIZE, name='lstm_cell')
+            lstm = tf.nn.rnn_cell.ResidualWrapper(lstm)
             lstm = tf.nn.rnn_cell.DropoutWrapper(lstm, output_keep_prob=self.keep_prob_)
             lstm = tf.nn.rnn_cell.MultiRNNCell([lstm] * RNN_NUM_LAYERS)
 
@@ -137,7 +139,9 @@ class PPO:
             rnn_net, final_state = tf.nn.dynamic_rnn(cell=lstm, inputs=lstm_in, initial_state=init_state)
             rnn_net = tf.reshape(rnn_net, [-1, RNN_UNIT_SIZE], name='flatten_rnn_outputs')
 
-            logits = layers.dense(rnn_net, 5, kernel_regularizer=w_reg, name="pi_logits")
+            logits = layers.dense(rnn_net, 5, 
+                                  kernel_initializer=normalized_columns_initializer(0.01),
+                                  kernel_regularizer=w_reg, name="pi_logits")
             policy_dist = tf.distributions.Categorical(logits=logits)
 
         params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=self.scope + '/' + name)
@@ -147,16 +151,11 @@ class PPO:
         w_reg = tf.contrib.layers.l2_regularizer(L2_REGULARIZATION)
 
         with tf.variable_scope(name, reuse=reuse):
-            cnn_net = layers.conv2d(inputs=state_in, filters=32, kernel_size=8, strides=4, activation=tf.nn.relu, padding='SAME')
-            cnn_net = layers.conv2d(inputs=cnn_net, filters=32, kernel_size=4, strides=2, activation=tf.nn.relu, padding='SAME')
-            cnn_net = layers.conv2d(inputs=cnn_net, filters=64, kernel_size=2, strides=1, activation=tf.nn.relu, padding='SAME')
-            serial_net = layers.flatten(cnn_net)
-
-            serial_net = layers.dense(serial_net, SERIAL_SIZE, tf.nn.relu, kernel_regularizer=w_reg)
-            serial_net = layers.dense(serial_net, SERIAL_SIZE, tf.nn.relu, kernel_regularizer=w_reg)
+            serial_net = layers.flatten(state_in)
 
             # LSTM layer
             lstm = tf.nn.rnn_cell.LSTMCell(num_units=RNN_UNIT_SIZE, name='lstm_cell')
+            lstm = tf.nn.rnn_cell.ResidualWrapper(lstm)
             lstm = tf.nn.rnn_cell.DropoutWrapper(lstm, output_keep_prob=self.keep_prob_)
             lstm = tf.nn.rnn_cell.MultiRNNCell([lstm] * RNN_NUM_LAYERS)
 
@@ -166,7 +165,9 @@ class PPO:
             rnn_net, final_state = tf.nn.dynamic_rnn(cell=lstm, inputs=lstm_in, initial_state=init_state)
             rnn_net = tf.reshape(rnn_net, [-1, RNN_UNIT_SIZE], name='flatten_rnn_outputs')
 
-            critic = layers.dense(rnn_net, 1, kernel_regularizer=w_reg, name="critic_out")
+            critic = layers.dense(rnn_net, 1, 
+                                  kernel_initializer=normalized_columns_initializer(1.0),
+                                  kernel_regularizer=w_reg, name="critic_out")
 
         params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=self.scope + '/' + name)
         return critic, params, init_state, final_state
@@ -193,7 +194,7 @@ class PPO:
                 # critic_loss= tf.reduce_mean(tf.square(self.critics - self.batch["rewards"]))
 
             with tf.variable_scope('entropy'):
-                self.entropy = self.actions.entropy()
+                self.entropy = tf.reduce_mean(self.actions.entropy())
 
             self.total_loss = self.actor_loss + (self.critic_loss * self.critic_beta) - self.entropy * self.entropy_beta
             summaries = []
@@ -214,22 +215,24 @@ class PPO:
                                                global_step=self.global_step,
                                                var_list=self.params)
 
-            for grad, var in zip(self.grads):
+            for grad, var in self.grads:
                 var_name = var.name + '_grad'
                 var_name = var_name.replace(':', '_')
                 summaries.append(tf.summary.histogram(var_name, grad))
 
         with tf.variable_scope('push'):
-            self.update_target_op = [target.assign(p) for p, target in zip(self.params, self.target_params)]
+            update_target_op_actor = [target.assign(p) for p, target in zip(self.actions_params, self.policy_target_params)]
+            update_target_op_critic = [target.assign(p) for p, target in zip(self.critics_params, self.value_target_params)]
+            self.update_target_op = tf.group(update_target_op_actor, update_target_op_critic)
 
         return tf.summary.merge(summaries)
 
     def feed_forward(self, state, rnn_state):
         eval_ops = [self.stoch_action, self.critic_eval, self.action_eval_fin_state, self.critic_eval_fin_state]
-        feed_dict = {self.state: state[np.newaxis, :],
+        feed_dict = {self.state_: state,
                      self.action_eval_init_state: rnn_state[0],
                      self.critic_eval_init_state: rnn_state[1],
-                     self.keep_prob: 1.0}
+                     self.keep_prob_: 1.0}
 
         action, value, a_fin_state, c_fin_state = self.sess.run(eval_ops, feed_dict)
         return action[0], value[0], (a_fin_state, c_fin_state)
@@ -243,7 +246,7 @@ class PPO:
                 feed_dict = {self.state_: ep_s,
                              self.actions_: ep_a,
                              self.rewards_: ep_r,
-                             self.advantage_: ep_adv}
+                             self.advantages_: ep_adv}
                 self.sess.run(self.iterator.initializer, feed_dict=feed_dict)
 
                 a_state, c_state = self.sess.run([self.action_init_state, self.critic_init_state])
@@ -253,7 +256,7 @@ class PPO:
                     try:
                         feed_dict = {self.action_init_state: a_state,
                                      self.critic_init_state: c_state,
-                                     self.keep_prob: 0.8}
+                                     self.keep_prob_: 1.0}
                         summary, step, a_state, c_state, _ = self.sess.run(train_ops, feed_dict=feed_dict)
                     except tf.errors.OutOfRangeError:
                         break
