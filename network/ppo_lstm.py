@@ -8,8 +8,8 @@ from utility.dataModule import one_hot_encoder_v2 as one_hot_encoder
 from utility.utils import discount_rewards
 
 # Network configuration
-SERIAL_SIZE = 256
-RNN_UNIT_SIZE = 256
+SERIAL_SIZE = 32 
+RNN_UNIT_SIZE = 32
 RNN_NUM_LAYERS = 3
 
 MINIBATCH_SIZE = 8
@@ -126,6 +126,7 @@ class PPO:
 
         with tf.variable_scope(name, reuse=reuse):
             serial_net = layers.flatten(state_in)
+            serial_net = layers.dense(serial_net, RNN_UNIT_SIZE)
 
             # LSTM layer
             lstm = tf.nn.rnn_cell.LSTMCell(num_units=RNN_UNIT_SIZE, name='lstm_cell')
@@ -152,6 +153,7 @@ class PPO:
 
         with tf.variable_scope(name, reuse=reuse):
             serial_net = layers.flatten(state_in)
+            serial_net = layers.dense(serial_net, RNN_UNIT_SIZE)
 
             # LSTM layer
             lstm = tf.nn.rnn_cell.LSTMCell(num_units=RNN_UNIT_SIZE, name='lstm_cell')
