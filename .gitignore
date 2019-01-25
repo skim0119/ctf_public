@@ -12,6 +12,7 @@ archive/
 archive_*
 logs/
 model/
+renders/
 *.NS
 *.lprof
 model_archives
