@@ -3,16 +3,18 @@ import tensorflow as tf
 import tensorflow.layers as layers
 
 import numpy as np
+import time
 
 from utility.dataModule import one_hot_encoder_v2 as one_hot_encoder
 from utility.utils import discount_rewards
 
 # Network configuration
-SERIAL_SIZE = 32 
-RNN_UNIT_SIZE = 32
-RNN_NUM_LAYERS = 3
+SERIAL_SIZE = 64
+RNN_UNIT_SIZE = 64
+RNN_NUM_LAYERS = 2
 
-MINIBATCH_SIZE = 8
+MINIBATCH_SIZE = 1 
+SEQUENCE_SIZE = 4
 L2_REGULARIZATION = 0.001
 
 
@@ -69,6 +71,11 @@ class PPO:
 
         # RNN Configurations
         self.rnn_type = rnn_type
+        
+        if scope != 'global':
+            self.param_summary = None
+            self.loss_summary = None
+            self.grad_summary = None
 
         with tf.variable_scope(self.scope):
             self._build_placeholders()
@@ -91,13 +98,18 @@ class PPO:
             self.determ_action = self.action_eval.mode()
             self.params = self.actions_params + self.critics_params
             self.target_params = self.policy_target_params + self.value_target_params
+            
+            variable_summary = []
+            for var in self.params:
+                var_name = var.name+'_var'
+                var_name = var_name.replace(':','_')
+                variable_summary.append(tf.summary.histogram(var_name, var)) 
+            self.param_summary = tf.summary.merge(variable_summary)
+
             if scope != 'global':
-                loss_sum = self._build_losses()
-                grad_sum = self._build_pipeline()
+                self._build_losses()
+                self._build_pipeline()
 
-
-        if scope != 'global':
-            self.summary_ = tf.summary.merge([loss_sum, grad_sum])
 
     def _build_dataset(self):
         # Use the TensorFlow Dataset API
@@ -105,7 +117,7 @@ class PPO:
                                                            "actions": self.actions_,
                                                            "rewards": self.rewards_,
                                                            "advantage": self.advantages_})
-        self.dataset = self.dataset.batch(MINIBATCH_SIZE, drop_remainder=True)
+        self.dataset = self.dataset.batch(SEQUENCE_SIZE, drop_remainder=True)
         self.iterator = self.dataset.make_initializable_iterator()
         self.batch = self.iterator.get_next()
 
@@ -131,11 +143,11 @@ class PPO:
             # LSTM layer
             lstm = tf.nn.rnn_cell.LSTMCell(num_units=RNN_UNIT_SIZE, name='lstm_cell')
             lstm = tf.nn.rnn_cell.ResidualWrapper(lstm)
-            lstm = tf.nn.rnn_cell.DropoutWrapper(lstm, output_keep_prob=self.keep_prob_)
+            #lstm = tf.nn.rnn_cell.DropoutWrapper(lstm, output_keep_prob=self.keep_prob_)
             lstm = tf.nn.rnn_cell.MultiRNNCell([lstm] * RNN_NUM_LAYERS)
 
             init_state = lstm.zero_state(batch_size=batch_size, dtype=tf.float32)
-            lstm_in = tf.expand_dims(serial_net, axis=1)
+            lstm_in = tf.expand_dims(serial_net, axis=0)
 
             rnn_net, final_state = tf.nn.dynamic_rnn(cell=lstm, inputs=lstm_in, initial_state=init_state)
             rnn_net = tf.reshape(rnn_net, [-1, RNN_UNIT_SIZE], name='flatten_rnn_outputs')
@@ -158,11 +170,11 @@ class PPO:
             # LSTM layer
             lstm = tf.nn.rnn_cell.LSTMCell(num_units=RNN_UNIT_SIZE, name='lstm_cell')
             lstm = tf.nn.rnn_cell.ResidualWrapper(lstm)
-            lstm = tf.nn.rnn_cell.DropoutWrapper(lstm, output_keep_prob=self.keep_prob_)
+            #lstm = tf.nn.rnn_cell.DropoutWrapper(lstm, output_keep_prob=self.keep_prob_)
             lstm = tf.nn.rnn_cell.MultiRNNCell([lstm] * RNN_NUM_LAYERS)
 
             init_state = lstm.zero_state(batch_size=batch_size, dtype=tf.float32)
-            lstm_in = tf.expand_dims(serial_net, axis=1)
+            lstm_in = tf.expand_dims(serial_net, axis=0)
 
             rnn_net, final_state = tf.nn.dynamic_rnn(cell=lstm, inputs=lstm_in, initial_state=init_state)
             rnn_net = tf.reshape(rnn_net, [-1, RNN_UNIT_SIZE], name='flatten_rnn_outputs')
@@ -178,7 +190,7 @@ class PPO:
         epsilon = 0.1
         with tf.variable_scope('loss'):
             self.global_step = tf.train.get_or_create_global_step()
-            epsilon_decay = tf.train.polynomial_decay(epsilon, self.global_step, 1e6, 0.01, power=0.0)
+            epsilon_decay = tf.train.polynomial_decay(epsilon, self.global_step, 1e-6, 0.01, power=0.0)
 
             with tf.variable_scope('actor'):
                 ratio = tf.maximum(self.actions.prob(self.batch["actions"]), 1e-13) / \
@@ -199,17 +211,16 @@ class PPO:
                 self.entropy = tf.reduce_mean(self.actions.entropy())
 
             self.total_loss = self.actor_loss + (self.critic_loss * self.critic_beta) - self.entropy * self.entropy_beta
+            
             summaries = []
             summaries.append(tf.summary.scalar("epsilon", epsilon_decay))
             summaries.append(tf.summary.scalar("total_loss", self.total_loss))
             summaries.append(tf.summary.scalar("actor_loss", self.actor_loss))
             summaries.append(tf.summary.scalar("critic_loss", self.critic_loss))
             summaries.append(tf.summary.scalar("entropy", self.entropy))
-
-            return tf.summary.merge(summaries)
+            self.loss_summary = tf.summary.merge(summaries)
 
     def _build_pipeline(self):
-        summaries = []
         with tf.variable_scope('train'):
             optimizer = tf.train.AdamOptimizer(self.lr_actor)
             self.grads = optimizer.compute_gradients(self.total_loss, var_list=self.params)
@@ -217,17 +228,17 @@ class PPO:
                                                global_step=self.global_step,
                                                var_list=self.params)
 
-            for grad, var in self.grads:
-                var_name = var.name + '_grad'
-                var_name = var_name.replace(':', '_')
-                summaries.append(tf.summary.histogram(var_name, grad))
-
         with tf.variable_scope('push'):
             update_target_op_actor = [target.assign(p) for p, target in zip(self.actions_params, self.policy_target_params)]
             update_target_op_critic = [target.assign(p) for p, target in zip(self.critics_params, self.value_target_params)]
             self.update_target_op = tf.group(update_target_op_actor, update_target_op_critic)
 
-        return tf.summary.merge(summaries)
+        summaries = []
+        for grad, var in self.grads:
+            var_name = var.name + '_grad'
+            var_name = var_name.replace(':', '_')
+            summaries.append(tf.summary.histogram(var_name, grad))
+        self.grad_summary = tf.summary.merge(summaries)
 
     def feed_forward(self, state, rnn_state):
         eval_ops = [self.stoch_action, self.critic_eval, self.action_eval_fin_state, self.critic_eval_fin_state]
@@ -239,10 +250,12 @@ class PPO:
         action, value, a_fin_state, c_fin_state = self.sess.run(eval_ops, feed_dict)
         return action[0], value[0], (a_fin_state, c_fin_state)
 
-    def feed_backward(self, episode_rollouts, epochs=10):
+    def feed_backward(self, episode_rollouts, epochs=1):
         self.sess.run([self.update_target_op])
 
-        for _ in range(epochs):
+        c = 0
+        ctime = time.time()
+        for ep in range(epochs):
             np.random.shuffle(episode_rollouts)
             for ep_s, ep_a, ep_r, ep_adv in episode_rollouts:
                 feed_dict = {self.state_: ep_s,
@@ -252,7 +265,8 @@ class PPO:
                 self.sess.run(self.iterator.initializer, feed_dict=feed_dict)
 
                 a_state, c_state = self.sess.run([self.action_init_state, self.critic_init_state])
-                train_ops = [self.summary_, self.global_step, self.action_fin_state, self.critic_fin_state, self.train_op]
+                summary_ = tf.summary.merge([self.param_summary, self.loss_summary, self.grad_summary])
+                train_ops = [summary_, self.global_step, self.action_fin_state, self.critic_fin_state, self.train_op]
 
                 while True:  # run until batch run out
                     try:
@@ -260,8 +274,11 @@ class PPO:
                                      self.critic_init_state: c_state,
                                      self.keep_prob_: 1.0}
                         summary, step, a_state, c_state, _ = self.sess.run(train_ops, feed_dict=feed_dict)
+                        c += 1
                     except tf.errors.OutOfRangeError:
                         break
+        dur = time.time() - ctime
+        print(f'Train: {c} batches trained, {len(episode_rollouts)} episodes: {dur} sec')
         return summary
 
 
