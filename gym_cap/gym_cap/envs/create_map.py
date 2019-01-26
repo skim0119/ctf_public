@@ -6,7 +6,8 @@ class CreateMap:
     given dimension size, number of obstacles,
     and number of agents for each team"""
 
-    def gen_map(name, dim=20, in_seed=None, rand_zones=True,
+    @staticmethod
+    def gen_map(name, dim=20, in_seed=None, rand_zones=False, np_random=None,
                 map_obj=[NUM_BLUE, NUM_UAV, NUM_RED, NUM_UAV, NUM_GRAY]):
         """
         Method
@@ -31,6 +32,8 @@ class CreateMap:
         """
 
         # init the seed and set new_map to zeros
+        if np_random == None:
+            np_random = np.random
         if not in_seed == None:
             np.random.seed(in_seed)
         new_map = np.zeros([dim, dim], dtype=int)
@@ -38,8 +41,8 @@ class CreateMap:
         # zones init
         new_map[:,:] = TEAM2_BACKGROUND
         if rand_zones:
-            sx, sy = np.random.randint(dim//2, 4*dim//5, [2])
-            lx, ly = np.random.randint(0, dim - max(sx,sy)-1, [2])
+            sx, sy = np_random.randint(dim//2, 4*dim//5, [2])
+            lx, ly = np_random.randint(0, dim - max(sx,sy)-1, [2])
             new_map[lx:lx+sx, ly:ly+sy] = TEAM1_BACKGROUND
         else:
             new_map[:,0:dim//2] = TEAM1_BACKGROUND
@@ -47,8 +50,8 @@ class CreateMap:
         # obstacles init
         num_obst = int(np.sqrt(dim))
         for i in range(num_obst):
-            lx, ly = np.random.randint(0, dim, [2])
-            sx, sy = np.random.randint(0, dim//5, [2]) + 1
+            lx, ly = np_random.randint(0, dim, [2])
+            sx, sy = np_random.randint(0, dim//5, [2]) + 1
             new_map[lx-sx:lx+sx, ly-sy:ly+sy] = OBSTACLE
 
         # define location of flags
@@ -81,10 +84,11 @@ class CreateMap:
         #np.save('map.npy', new_map)
         return new_map, static_map
 
+    @staticmethod
     def populate_map(new_map, code_where, code_what):
         """
         Function
-            Adds "code_what" to a random location of "code_where" at "new_map"    
+            Adds "code_what" to a random location of "code_where" at "new_map"
 
         Parameters
         ----------
@@ -96,8 +100,7 @@ class CreateMap:
             Value assigned to the random location of the map
         """
         dimx, dimy = new_map.shape
-        for _ in range(10000):
-        #while True:
+        while True:
             lx = np.random.randint(0, dimx)
             ly = np.random.randint(0, dimy)
             if new_map[lx,ly] == code_where:

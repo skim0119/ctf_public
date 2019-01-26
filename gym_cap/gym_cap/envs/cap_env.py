@@ -38,7 +38,7 @@ class CapEnv(gym.Env):
             self.interaction = self._interaction_stoch
         else: self.interaction = self._interaction_determ
 
-    def reset(self, map_size=None, mode="random", policy_blue=None, policy_red=None, seed=None):
+    def reset(self, map_size=None, mode="random", policy_blue=None, policy_red=None):
         """
         Resets the game
 
@@ -47,13 +47,11 @@ class CapEnv(gym.Env):
         :return: void
 
         """
-        if seed is not None:
-            self.seed(seed)
-            
+
         if map_size is None:
-            self._env, self.team_home = CreateMap.gen_map('map', dim=self.map_size[0], rand_zones=STOCH_ZONES)
+            self._env, self.team_home = CreateMap.gen_map('map', dim=self.map_size[0], rand_zones=STOCH_ZONES, np_random=self.np_random)
         else:
-            self._env, self.team_home = CreateMap.gen_map('map', map_size, rand_zones=STOCH_ZONES)
+            self._env, self.team_home = CreateMap.gen_map('map', map_size, rand_zones=STOCH_ZONES, np_random=self.np_random)
 
         self.map_size = (len(self._env), len(self._env[0]))
 
@@ -73,8 +71,6 @@ class CapEnv(gym.Env):
 
         if NUM_RED == 0:
             self.mode = "sandbox"
-        else:
-            self.mode = mode
 
         self.blue_win = False
         self.red_win = False
@@ -180,6 +176,10 @@ class CapEnv(gym.Env):
         self.observation_space_grey = np.full_like(self._env, -1)
 
     @property
+    def get_full_state(self):
+        return np.copy(self._env)
+
+    @property
     def get_team_blue(self):
         return np.copy(self.team_blue)
 
@@ -279,7 +279,7 @@ class CapEnv(gym.Env):
                         n_friends += 1
                     elif entity.team == TEAM2_BACKGROUND and self._env[locx][locy] == TEAM2_UGV:
                         n_friends += 1
-        if flag and np.random.rand() > n_friends/(n_friends + n_enemies):
+        if flag and self.np_random.rand() > n_friends/(n_friends + n_enemies):
 
             entity.isAlive = False
             self._env[loc] = DEAD
@@ -293,10 +293,8 @@ class CapEnv(gym.Env):
         self    : object
             CapEnv object
         """
-        self.np_random, _seed = seeding.np_random(seed)
-        np.random.seed(seed)
-
-        return [_seed]
+        self.np_random, seed = seeding.np_random(seed)
+        return [seed]
 
     def step(self, entities_action=None, cur_suggestions=None):
         """
@@ -424,13 +422,13 @@ class CapEnv(gym.Env):
         self.viewer.draw_polygon([(0, 0), (SCREEN_W, 0), (SCREEN_W, SCREEN_H), (0, SCREEN_H)], color=(0, 0, 0))
 
         self._env_render(self.team_home,
-                        [5, 5], [SCREEN_W//2-10, SCREEN_H//2-10])
+                        [10, 10], [SCREEN_W//2-10, SCREEN_H//2-10])
         self._env_render(self.observation_space_blue,
-                        [5+SCREEN_W//2, 5], [SCREEN_W//2-10, SCREEN_H//2-10])
+                        [10+SCREEN_W//2, 10], [SCREEN_W//2-10, SCREEN_H//2-10])
         self._env_render(self.observation_space_red,
-                        [5+SCREEN_W//2, 5+SCREEN_H//2], [SCREEN_W//2-10, SCREEN_H//2-10])
+                        [10+SCREEN_W//2, 10+SCREEN_H//2], [SCREEN_W//2-10, SCREEN_H//2-10])
         self._env_render(self._env,
-                        [5, 5+SCREEN_H//2], [SCREEN_W//2-10, SCREEN_H//2-10])
+                        [10, 10+SCREEN_H//2], [SCREEN_W//2-10, SCREEN_H//2-10])
 
         return self.viewer.render(return_rgb_array = mode=='rgb_array')
 
@@ -446,7 +444,7 @@ class CapEnv(gym.Env):
                 locx, locy = rend_loc
                 locx += x * tile_w
                 locy += y * tile_h
-                cur_color = np.divide(COLOR_DICT[env[x][y]], 255)
+                cur_color = np.divide(COLOR_DICT[env[x][y]], 255.0)
                 self.viewer.draw_polygon([
                     (locx, locy),
                     (locx + tile_w, locy),
