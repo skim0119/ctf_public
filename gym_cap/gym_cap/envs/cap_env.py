@@ -8,6 +8,7 @@ import numpy as np
 
 from .agent import *
 from .create_map import CreateMap
+from .const import *
 
 """
 Requires that all units initially exist in home zone.
@@ -38,7 +39,8 @@ class CapEnv(gym.Env):
             self.interaction = self._interaction_stoch
         else: self.interaction = self._interaction_determ
 
-    def reset(self, map_size=None, mode="random", policy_blue=None, policy_red=None):
+    def reset(self, map_size=None, mode="random", policy_blue=None, policy_red=None,
+                 num_blue=NUM_BLUE, num_red=NUM_RED):
         """
         Resets the game
 
@@ -47,11 +49,11 @@ class CapEnv(gym.Env):
         :return: void
 
         """
-
+        map_obj=[num_blue, NUM_UAV, num_red, NUM_UAV, NUM_GRAY]
         if map_size is None:
-            self._env, self.team_home = CreateMap.gen_map('map', dim=self.map_size[0], rand_zones=STOCH_ZONES, np_random=self.np_random)
+            self._env, self.team_home = CreateMap.gen_map('map', dim=self.map_size[0], rand_zones=STOCH_ZONES, np_random=self.np_random, map_obj=map_obj)
         else:
-            self._env, self.team_home = CreateMap.gen_map('map', map_size, rand_zones=STOCH_ZONES, np_random=self.np_random)
+            self._env, self.team_home = CreateMap.gen_map('map', map_size, rand_zones=STOCH_ZONES, np_random=self.np_random, map_obj=map_obj)
 
         self.map_size = (len(self._env), len(self._env[0]))
 
@@ -69,7 +71,7 @@ class CapEnv(gym.Env):
 
         self.mode = mode
 
-        if NUM_RED == 0:
+        if num_red== 0:
             self.mode = "sandbox"
 
         self.blue_win = False
