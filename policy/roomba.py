@@ -115,13 +115,15 @@ class PolicyGen:
         # Checking obstacle
         dir_x = [0, 0, 1, 0, -1] # dx for [stay, up, right, down, left]
         dir_y = [0,-1, 0, 1,  0] # dy for [stay, up, right, down ,left]
-        is_possible_to_move = lambda d: obs[x+dir_x[d]][y+dir_y[d]] not in [8,4]
 
         # Protocol
-        if 2 in elements: # Enemy in the vision
+        enemy_id = 4 if agent.team == 0 else 2
+        flag_id = 7 if agent.team == 0 else 6
+        is_possible_to_move = lambda d: obs[x+dir_x[d]][y+dir_y[d]] not in [8,enemy_id]
+        if enemy_id in elements: # Enemy in the vision
             opposite_move = [0, 3, 4, 1, 2]
             action = opposite_move[self.previous_move[agent_id]]
-        elif 6 in elements: # Flag Found
+        elif flag_id in elements: # Flag Found
             # move towards the flag
             fx, fy = field[6][0] # flag location (coord. of 'view')
             if fy > 2: # move down
