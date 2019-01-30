@@ -3,14 +3,12 @@ import tensorflow as tf
 import tensorflow.layers as layers
 
 import numpy as np
-import time
 
 # Network configuration
 RNN_UNIT_SIZE = 32
 RNN_NUM_LAYERS = 3
 
-MINIBATCH_SIZE = 1
-SEQUENCE_SIZE = 4
+MINIBATCH_SIZE = 8
 L2_REGULARIZATION = 0.001
 
 
@@ -39,9 +37,8 @@ class RPG:
     def __init__(self,
                  in_size,
                  action_size,
-                 lr_policy=1e-4,
-                 lr_baseline=1e-4,
-                 grad_clip_val=0,
+                 lr_policy=1e-3,
+                 lr_baseline=1e-3,
                  entropy_beta=0.01,
                  tau=0.001,
                  sess=None,
@@ -54,7 +51,6 @@ class RPG:
         self.action_size = action_size
         self.lr_policy = lr_policy
         self.lr_baseline = lr_baseline
-        self.grad_clip_val = grad_clip_val
         self.entropy_beta = entropy_beta
         self.tau = tau
 
@@ -106,12 +102,12 @@ class RPG:
 
     def _build_placeholders(self):
         """ Define the placeholders """
-        self.observation_ = tf.placeholder(tf.float32, [1] + self.in_size, 'observations')
-        self.actions_ = tf.placeholder(tf.int32, [None, 1], 'actions')
+        self.observation_ = tf.placeholder(tf.float32, [None] + self.in_size, 'observations')
+        self.actions_ = tf.placeholder(tf.int32, [None, None], 'actions')
         self.actions_onehot = tf.one_hot(self.actions_, self.action_size)
-        self.rewards_ = tf.placeholder(tf.float32, [None, 1], 'rewards')
-        self.baseline_ = tf.placeholder(tf.float32, [None, 1], 'baselines')
-        self.seq_len_ = tf.placeholder(tf.int32, (1,), 'seq_len')
+        self.rewards_ = tf.placeholder(tf.float32, [None, None], 'rewards')
+        self.baseline_ = tf.placeholder(tf.float32, [None, None], 'baselines')
+        self.seq_len_ = tf.placeholder(tf.int32, (None,), 'seq_len')
 
     def _build_dataset(self):
         """ Use the TensorFlow Dataset API """
@@ -233,25 +229,34 @@ class RPG:
     def feed_backward(self, episode_rollouts, epochs=1):
         for ep in range(epochs):
             np.random.shuffle(episode_rollouts)
-            for ep_s, ep_a, ep_r, ep_base in episode_rollouts:
-                feed_dict = {self.observation_: ep_s,
-                             self.actions_: ep_a,
-                             self.rewards_: ep_r,
-                             self.baseline_: ep_base}
-                self.sess.run(self.iterator.initializer, feed_dict=feed_dict)
+            lengths = [p[4] for p in episode_rollouts]
+            maxlen = max(lengths)
 
-                p_state, b_state = self.sess.run(tuple(self.rnn_init))
-                summary_ = tf.summary.merge([self.var_summary, self.loss_summary, self.grad_summary])
-                train_ops = [summary_, self.global_step,
-                             self.rnn_fin[0], self.rnn_fin[1], self.train_op]
+            observations, actions, rewards, baselines = [], [], [], []
+            for ep_s, ep_a, ep_r, ep_base, len in episode_rollouts:
+                observations.append(np.append(ep_s, np.zeros((maxlen - len,) + ep_s.shape[1:]), axis=0))
+                actions.append(np.append(ep_a, np.zeros(maxlen - len), axis=0, dtype=np.int32))
+                rewards.append(np.append(ep_r, np.zeros(maxlen - len), axis=0))
+                baselines.append(np.append(ep_base, np.zeros(maxlen - len), axis=0))
+            feed_dict = {self.observation_: np.stack(observations),
+                         self.actions_: np.stack(actions),
+                         self.rewards_: np.stack(rewards),
+                         self.baseline_: np.stack(baselines)}
+            self.sess.run(self.iterator.initializer, feed_dict=feed_dict)
 
-                while True:  # run until batch run out
-                    try:
-                        feed_dict = {self.rnn_init[0]: p_state,
-                                     self.rnn_init[1]: b_state}
-                        summary, step, p_state, b_state, _ = self.sess.run(train_ops, feed_dict=feed_dict)
-                    except tf.errors.OutOfRangeError:
-                        break
+            p_state, b_state = self.sess.run(tuple(self.rnn_init))
+            summary_ = tf.summary.merge([self.var_summary, self.loss_summary, self.grad_summary])
+            train_ops = [summary_, self.global_step,
+                         self.rnn_fin[0], self.rnn_fin[1], self.train_op]
+
+            while True:  # run until batch run out
+                try:
+                    feed_dict = {self.rnn_init[0]: p_state,
+                                 self.rnn_init[1]: b_state,
+                                 self.seq_len_: np.array(lengths)}
+                    summary, step, p_state, b_state, _ = self.sess.run(train_ops, feed_dict=feed_dict)
+                except tf.errors.OutOfRangeError:
+                    break
         self.sess.run([self.update_targ_op])
         return summary, step
 
