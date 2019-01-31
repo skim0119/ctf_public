@@ -144,11 +144,12 @@ class ActorCritic:
                 rnn_cell = rnn.DropoutWrapper(rnn_cell, output_keep_prob=0.8)
                 rnn_cell = rnn.MultiRNNCell(cells=[rnn_cell]*self.rnn_num_layers)
                 
-                self.rnn_init_state = rnn_cell.zero_state(batch_size=1, dtype=tf.float32)
+                self.rnn_init_state_single = rnn_cell.zero_state(batch_size=1, dtype=tf.float32)
+                self.rnn_init_state = rnn_cell.zero_state(batch_size=8, dtype=tf.float32)
                 rnn_net = tf.expand_dims(serial_net, axis=1)
                 
                 # rnn_tuple_state = tuple(tf.unstack(self.rnn_init_states_, axis=0))  # unstack by rnn layer
-                rnn_net, self.final_state = tf.nn.dynamic_rnn(rnn_cell, rnn_net, initial_state=self.rnn_init_state)
+                rnn_net, self.final_state = tf.nn.dynamic_rnn(rnn_cell, rnn_net, initial_state=self.rnn_init_state_single)
                 rnn_net = tf.reshape(rnn_net, [-1, self.rnn_unit_size])
             else:
                 # Multi RNN Cell is not yet implemented

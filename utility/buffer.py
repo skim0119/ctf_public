@@ -104,6 +104,9 @@ class Trajectory:
         # Find longest length sequence
         ret = tuple(np.array(b) for b in self.buffer)
         return ret
+    
+    def section(self, length):
+        self.buffer = [b[-length:] for b in self.buffer]
 
     def draw_trace(self, seq_len=8):
         buf_len = len(self.buffer[0])

@@ -1,6 +1,6 @@
 import numpy as np
 import random
-import scipy
+import scipy.signal
 
 """Utility methods and classes used in CtF Problem
 

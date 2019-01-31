@@ -153,7 +153,7 @@ class PPO:
             rnn_net, final_state = tf.nn.dynamic_rnn(cell=lstm, inputs=lstm_in, initial_state=init_state)
             rnn_net = tf.reshape(rnn_net, [-1, RNN_UNIT_SIZE], name='flatten_rnn_outputs')
 
-            logits = layers.dense(rnn_net, 5, 
+            logits = layers.dense(serial_net, 5, 
                                   kernel_initializer=normalized_columns_initializer(0.01),
                                   kernel_regularizer=w_reg, name="pi_logits")
             policy_dist = tf.distributions.Categorical(logits=logits)
@@ -181,7 +181,7 @@ class PPO:
             rnn_net, final_state = tf.nn.dynamic_rnn(cell=lstm, inputs=lstm_in, initial_state=init_state)
             rnn_net = tf.reshape(rnn_net, [-1, RNN_UNIT_SIZE], name='flatten_rnn_outputs')
 
-            critic = layers.dense(rnn_net, 1, 
+            critic = layers.dense(serial_net, 1, 
                                   kernel_initializer=normalized_columns_initializer(1.0),
                                   kernel_regularizer=w_reg, name="critic_out")
 
@@ -236,7 +236,9 @@ class PPO:
             self.update_target_op = tf.group(update_target_op_actor, update_target_op_critic)
 
         summaries = []
-        for grad, var in self.grads:
+        for grad, var in self.grads: 
+            if grad is None:
+                continue
             var_name = var.name + '_grad'
             var_name = var_name.replace(':', '_')
             summaries.append(tf.summary.histogram(var_name, grad))
@@ -280,7 +282,7 @@ class PPO:
                     except tf.errors.OutOfRangeError:
                         break
         dur = time.time() - ctime
-        #print(f'Train: {c} batches trained, {len(episode_rollouts)} episodes: {dur} sec')
+        # print(f'Train: {c} batches trained, {len(episode_rollouts)} episodes: {dur} sec')
         return summary
 
 
