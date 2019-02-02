@@ -40,7 +40,7 @@ class RPG:
                  lr_policy=1e-3,
                  lr_baseline=1e-3,
                  entropy_beta=0.01,
-                 tau=0.001,
+                 tau=0.1,
                  sess=None,
                  ):
         # Class Environment
