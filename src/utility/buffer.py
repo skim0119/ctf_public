@@ -55,7 +55,7 @@ class Trajectory:
 
     """
 
-    def __init__(self, depth=4, length_max=150):
+    def __init__(self, depth=4):
         # Configuration
         self.depth = depth
         self.length_max = length_max
@@ -64,7 +64,7 @@ class Trajectory:
         self.buffer = [[] for _ in range(depth)]
 
     def __repr__(self):
-        return f'Trajectory (depth={self.depth},length={self.length_max})'
+        return f'Trajectory (depth={self.depth})'
 
     def __len__(self):
         return len(self.buffer[0])
@@ -75,24 +75,15 @@ class Trajectory:
     def __setitem__(self, key, item):
         self.buffer[key] = item
 
-    def is_full(self):
-        return len(self.buffer[0]) == self.length_max
-
     def append(self, mdp_tup):
         for buf, element in zip(self.buffer, mdp_tup):
             buf.append(element)
-            if len(self.buffer[0]) == self.length_max:
-                buf = buf[1:]
-        # for i, element in enumerate(mdp_tup):
-        #    self.buffer[i].append(element)
-        #    if len(self.buffer[0]) == self.length_max:
-        #        self.buffer[i] = self.buffer[i][1:]
 
     def trim(self, serial_length):
         traj_list = []
         s_, e_ = len(self.buffer[0]) - serial_length, len(self.buffer[0])
         while e_ > 0:
-            new_traj = Trajectory(depth=self.depth, length_max=self.length_max)
+            new_traj = Trajectory(depth=self.depth)
             new_buffer = [buf[max(s_, 0):e_] for buf in self.buffer]
             new_traj.buffer = new_buffer
             traj_list.append(new_traj)
