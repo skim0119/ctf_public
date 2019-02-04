@@ -58,7 +58,6 @@ class Trajectory:
     def __init__(self, depth=4):
         # Configuration
         self.depth = depth
-        self.length_max = length_max
 
         # Initialize Components
         self.buffer = [[] for _ in range(depth)]
@@ -78,6 +77,16 @@ class Trajectory:
     def append(self, mdp_tup):
         for buf, element in zip(self.buffer, mdp_tup):
             buf.append(element)
+
+    def extend(self, traj):
+        for original_list, new_list in zip(self.buffer, traj):
+            original_list.extend(new_list)
+
+    def clear(self):
+        self.buffer = [[] for _ in range(depth)]
+
+    def nparray(self):
+        return tuple(np.stack(l) for l in self.buffer)
 
     def trim(self, serial_length):
         traj_list = []
