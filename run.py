@@ -6,7 +6,7 @@ import shutil
 import time
 import datetime
 
-# import src.train as train
+from src.train import Worker
 
 
 def reset_output_directory(remove_exist=True):
@@ -87,6 +87,9 @@ if __name__ == "__main__":
     stime = time.time()
     sdate = datetime.datetime.now()
     print('Start Program ' + sdate.strftime("%Y-%m-%d %H:%M"))
+
+    worker = Worker(epoch)
+    worker.run()
 
     print(f'End {datetime.datetime.now().strftime("%Y-%m-%d %H:%M")}')
     print(f'Total Run Time : {time.time()-stime} sec')
