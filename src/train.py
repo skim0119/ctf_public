@@ -1,18 +1,15 @@
 import os
 import sys
-# os.chdir('./..')
-sys.path.insert(0, "./src/")
 
 import configparser
 
 import tensorflow as tf
 
 import time
-import gym, gym_cap
+import gym
+import gym_cap
 import gym_cap.envs.const as CONST
 import numpy as np
-import random
-import math
 
 # Data Processing Module
 from utility.dataModule import one_hot_encoder as one_hot_encoder
@@ -20,13 +17,15 @@ from utility.utils import MovingAverage as MA
 from utility.utils import discount_rewards
 from utility.buffer import Trajectory as Replay_buffer
 
-# the modules that you can use to generate the policy. 
+# the modules that you can use to generate the policy.
 import policy.zeros as zeros
 
 from network import ActorCritic as Network
 
 # import imageio
 
+# os.chdir('./..')
+sys.path.insert(0, "./src/")
 
 # Configuration Parser
 config = configparser.ConfigParser()
@@ -34,12 +33,12 @@ config.read('config.ini')
 
 # Default configuration constants
 N_CHANNEL = 6
-VISION_RANGE = 19 # CNN Size
-VISION_DX, VISION_DY = 2*VISION_RANGE+1, 2*VISION_RANGE+1
-INPUT_SHAPE = [None,VISION_DX,VISION_DY,N_CHANNEL]
-ACTION_SHAPE = config.getint('DEFAULT','ACTION_SPACE')
+VISION_RANGE = 19  # CNN Size
+VISION_DX, VISION_DY = 2 * VISION_RANGE + 1, 2 * VISION_RANGE + 1
+INPUT_SHAPE = [None, VISION_DX, VISION_DY, N_CHANNEL]
+ACTION_SHAPE = config.getint('DEFAULT', 'ACTION_SPACE')
 
-BATCH_SIZE = 1024 
+BATCH_SIZE = 1024
 NUM_AGENT = CONST.NUM_BLUE
 NUM_RED = CONST.NUM_RED
 
@@ -48,17 +47,17 @@ LR_C = 2e-4
 GAMMA = config.getfloat('TRAINING', 'DISCOUNT_RATE')
 
 MAP_SIZE = 20
-MAX_EP = config.getint('TRAINING','MAX_STEP')
+MAX_EP = config.getint('TRAINING', 'MAX_STEP')
 
 # Containers for Statistics
-ma_step = config.getint('TRAINING','MOVING_AVERAGE_SIZE')
+ma_step = config.getint('TRAINING', 'MOVING_AVERAGE_SIZE')
 
-## Save/Summary
+# Save/Summary
 LOG_PATH = './logs/run'
 MODEL_PATH = './model'
 RENDER_PATH = './render'
-save_network_frequency = config.getint('TRAINING','SAVE_NETWORK_FREQ')
-save_stat_frequency = config.getint('TRAINING','SAVE_STATISTICS_FREQ')
+save_network_frequency = config.getint('TRAINING', 'SAVE_NETWORK_FREQ')
+save_stat_frequency = config.getint('TRAINING', 'SAVE_STATISTICS_FREQ')
 
 
 class Worker():
@@ -79,7 +78,7 @@ class Worker():
                                entropy_beta=0.05,
                                name=name)
         Worker.global_episode = self.network.global_step
-                
+
         self.writer = tf.summary.FileWriter(LOG_PATH, self.network.graph)
 
         # Initialize Environment
@@ -98,7 +97,6 @@ class Worker():
         return actions, values
 
     def run(self):
-        batch_count = 0
         for episode in range(self.episode_num + 1):
             self.progbar.update(episode)
             cd_r, r, l, s, summary_ = self.rollout(episode=episode)
@@ -117,11 +115,11 @@ class Worker():
                 summary.value.add(tag='Records/mean_succeed', simple_value=Worker.global_succeed())
                 summary.value.add(tag='Records/mean_episode_reward', simple_value=Worker.global_ep_rewards())
                 self.writer.add_summary(summary, episode)
-                self.writer.add_summary(last_none_summary,episode)
+                self.writer.add_summary(last_none_summary, episode)
                 self.writer.flush()
 
             if episode % save_network_frequency == 0 and episode != 0:
-                self.network.save(MODEL_PATH+'/ctf_policy.ckpt', global_step=Worker.global_step)
+                self.network.save(MODEL_PATH + '/ctf_policy.ckpt', global_step=Worker.global_step)
 
     def rollout(self, episode=0, train=True):
         # Initialize run
@@ -130,7 +128,7 @@ class Worker():
         s0 = self.env.reset()
         s0 = one_hot_encoder(self.env._env, self.env.get_team_blue, VISION_RANGE)
         # parameters
-        ep_r = 0 # Episodic Reward
+        ep_r = 0  # Episodic Reward
         prev_r = 0
         step = 0
         d = False
@@ -146,10 +144,10 @@ class Worker():
             s1, env_reward, d, _ = self.env.step(a.tolist())
             s1 = one_hot_encoder(self.env._env, self.env.get_team_blue, VISION_RANGE)
             is_alive = [ag.isAlive for ag in self.env.get_team_blue]
-            
+
             r = env_reward - prev_r - 0.01
 
-            if step == MAX_EP and d == False:
+            if step == MAX_EP and not d:
                 r = -100
                 d = True
 
@@ -186,9 +184,9 @@ class Worker():
                 rewards = np.array(traj[2])
                 values = np.array(traj[3])
                 value_ext = np.append(values, [v1[idx]])
-                td_target  = rewards + GAMMA * value_ext[1:]
+                td_target = rewards + GAMMA * value_ext[1:]
                 advantages = rewards + GAMMA * value_ext[1:] - value_ext[:-1]
-                advantages = discount_rewards(advantages,GAMMA)
+                advantages = discount_rewards(advantages, GAMMA)
 
                 traj[3] = td_target.tolist()
                 traj[4] = advantages.tolist()
@@ -201,7 +199,6 @@ class Worker():
                 graph_summary, global_step = self.network.feed_backward(self.experience_buffer.nparray(), epochs=1)
                 self.experience_buffer.clear()
                 etime = time.time()
-                #print(f'\nTraining Duration: {etime-stime} sec')
+                # print(f'\nTraining Duration: {etime-stime} sec')
 
         return ep_r, env_reward, step, self.env.blue_win, graph_summary
-

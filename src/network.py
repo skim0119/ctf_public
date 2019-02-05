@@ -52,7 +52,7 @@ class ActorCritic:
         self.entropy_beta = entropy_beta
 
         # Build Graph
-        with self.graph.as_default(): 
+        with self.graph.as_default():
             self._build_placeholders()
             self._build_dataset()
 
@@ -62,7 +62,7 @@ class ActorCritic:
             self.result = [policy, critic]
             self.actor_var = policy_vars
             self.critic_var = critic_vars
-            self.graph_var = policy_vars + critic_vars 
+            self.graph_var = policy_vars + critic_vars
             self.prob_distribution = tf.distributions.Categorical(probs=policy)
 
             # Policy Network for Forward Pass (Same Weight)
@@ -90,14 +90,14 @@ class ActorCritic:
             self.grad_summary = self._build_pipeline()
 
             # Save and Restore
-            self.saver = tf.train.Saver(self.graph_var, max_to_keep=3) 
+            self.saver = tf.train.Saver(self.graph_var, max_to_keep=3)
 
             # Session
             if sess is None:
                 gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.25,
                                             allow_growth=True)
                 session_config = tf.ConfigProto(gpu_options=gpu_options)
-                                                # log_device_placement=True)
+                # log_device_placement=True)
                 self.sess = tf.Session(graph=self.graph, config=session_config)
                 print(self.sess.list_devices())
 
@@ -108,7 +108,6 @@ class ActorCritic:
             else:
                 self.sess.run(tf.global_variables_initializer())
                 print("Initialized Variables")
-
 
     def save(self, path, global_step=None):
         if global_step is None:
@@ -131,7 +130,8 @@ class ActorCritic:
                             "rewards": self.rewards_,
                             "td_targets": self.td_targets_,
                             "advantages": self.advantages_}
-            self.dataset = tf.data.Dataset.from_tensor_slices(dataset_dict).shuffle(buffer_size=SHUFFLE_BUFFER).batch(MINIBATCH_SIZE, drop_remainder=True).prefetch(buffer_size=PREFETCH_BUFFER)
+            self.dataset = tf.data.Dataset.from_tensor_slices(dataset_dict).shuffle(buffer_size=SHUFFLE_BUFFER).batch(
+                MINIBATCH_SIZE, drop_remainder=True).prefetch(buffer_size=PREFETCH_BUFFER)
             self.iterator = self.dataset.make_initializable_iterator()
             self.batch = self.iterator.get_next()
 
@@ -151,9 +151,9 @@ class ActorCritic:
             net = layers.fully_connected(net, 128)
 
             logits = layers.fully_connected(net, self.output_shape,
-                                  weights_initializer=Initializer.normalized_columns_init(0.01),
-                                  weights_regularizer=w_reg,
-                                  scope='pi_logits')
+                                            weights_initializer=Initializer.normalized_columns_init(0.01),
+                                            weights_regularizer=w_reg,
+                                            scope='pi_logits')
             dist = tf.nn.softmax(logits, name='action')
             policy_dist = tf.reshape(dist, [-1, self.output_shape])
 
@@ -175,10 +175,10 @@ class ActorCritic:
             net = layers.flatten(net)
 
             critic = layers.fully_connected(net, 1,
-                                  weights_initializer=Initializer.normalized_columns_init(1.0),
-                                  weights_regularizer=w_reg,
-                                  activation_fn=None,
-                                  scope="critic_out")
+                                            weights_initializer=Initializer.normalized_columns_init(1.0),
+                                            weights_regularizer=w_reg,
+                                            activation_fn=None,
+                                            scope="critic_out")
             critic = tf.reshape(critic, [-1])
 
         vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=name)
@@ -191,7 +191,7 @@ class ActorCritic:
             with tf.variable_scope('entropy'):
                 #self.entropy = -tf.reduce_mean(self.result[0] * tf.log(self.result[0]), name='entropy')
                 self.entropy = tf.reduce_mean(self.prob_distribution.entropy())
-            
+
             with tf.variable_scope('actor'):
                 actions_OH = tf.one_hot(self.batch["actions"], self.output_shape)
                 obj_func = tf.log(tf.reduce_sum(self.result[0] * actions_OH, 1))
@@ -214,11 +214,11 @@ class ActorCritic:
             actor_optimizer = tf.train.AdamOptimizer(self.lr_actor)
             critic_optimizer = tf.train.AdamOptimizer(self.lr_critic)
             self.train_op = tf.group([actor_optimizer.minimize(self.actor_loss,
-                                                                var_list=self.actor_var),
+                                                               var_list=self.actor_var),
                                       critic_optimizer.minimize(self.critic_loss,
-                                                                  global_step=self.global_step,
-                                                                  var_list=self.critic_var)])
-            grads = actor_optimizer.compute_gradients(self.actor_loss) 
+                                                                global_step=self.global_step,
+                                                                var_list=self.critic_var)])
+            grads = actor_optimizer.compute_gradients(self.actor_loss)
 
             summaries = []
             for grad, var in grads:
@@ -233,7 +233,7 @@ class ActorCritic:
         feed_dict = {self.observations_: states}
 
         action, values = self.sess.run(self.evaluate, feed_dict)
-        action, _, values = self.sess.run([self.action_sampling]+self.evaluate, feed_dict)
+        action, _, values = self.sess.run([self.action_sampling] + self.evaluate, feed_dict)
 
         return action, values
 
@@ -264,4 +264,3 @@ class ActorCritic:
                 except tf.errors.OutOfRangeError:
                     break
         return summary, step
-
