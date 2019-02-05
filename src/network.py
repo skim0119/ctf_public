@@ -1,6 +1,6 @@
 """ Actor-Critic Policy """
 import tensorflow as tf
-import tensorflow.layers as layers
+import tensorflow.contrib.layers as layers
 
 import numpy as np
 
@@ -40,12 +40,6 @@ class ActorCritic:
         # Class Environment
         self.graph = tf.Graph()
         self.sess = sess
-        if sess is None:
-            gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.25,
-                                        allow_growth=True)
-            session_config = tf.ConfigProto(gpu_options=gpu_options,
-                                            log_device_placement=True)
-            self.sess = tf.Session(graph=self.graph, config=Session_config))
         self.name = name
 
         # Parameters & Configs
@@ -65,8 +59,8 @@ class ActorCritic:
             critic, critic_vars = self._build_critic_network(self.batch["observations"], 'critic')
             self.result = [policy, critic]
             self.actor_var = policy_vars
-            self.critic_var = baseline_vars
-            self.graph_var = policy_vars + baseline_vars
+            self.critic_var = critic_vars
+            self.graph_var = policy_vars + critic_vars 
             self.prob_distribution = tf.distributions.Categorical(probs=policy)
 
             # Policy Network for Forward Pass (Same Weight)
@@ -80,6 +74,7 @@ class ActorCritic:
                                                         batch_size=1)
             self.evaluate = [policy_eval, critic_eval]
             self.eval_distribution = tf.distributions.Categorical(probs=policy_eval)
+            self.action_sampling = self.eval_distribution.sample()
 
             # Build Summary and Training Operations
             variable_summary = []
@@ -95,20 +90,28 @@ class ActorCritic:
             # Save and Restore
             self.saver = tf.train.Saver(self.graph_var, max_to_keep=3) 
 
+            # Session
+            if sess is None:
+                gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.25,
+                                            allow_growth=True)
+                session_config = tf.ConfigProto(gpu_options=gpu_options)
+                                                # log_device_placement=True)
+                self.sess = tf.Session(graph=self.graph, config=session_config)
+                print(self.sess.list_devices())
+
+            ckpt = tf.train.get_checkpoint_state('model/')
+            if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
+                self.saver.restore(self.sess, ckpt.model_checkpoint_path)
+                print("Load Model : ", ckpt.model_checkpoint_path)
+            else:
+                self.sess.run(tf.global_variables_initializer())
+                print("Initialized Variables")
+
 
     def save(self, path, global_step=None):
         if global_step is None:
             global_step = self.global_step
         self.saver.save(self.sess, save_path=path, global_step=global_step)
-
-    def restore(self, path):
-        ckpt = tf.train.get_checkpoint_state(path)
-        if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
-            self.saver.restore(self.sess, ckpt.model_checkpoint_path)
-            print("Load Model : ", ckpt.model_checkpoint_path)
-        else:
-            self.sess.run(tf.global_variables_initializer())
-            print("Initialized Variables")
 
     def _build_placeholders(self):
         """ Define the placeholders """
@@ -121,13 +124,12 @@ class ActorCritic:
     def _build_dataset(self):
         """ Use the TensorFlow Dataset API """
         with tf.device('/cpu:0'):
-            self.dataset = tf.data.Dataset.from_tensor_slices({"observations": self.observations_,
-                                                               "actions": self.actions_,
-                                                               "rewards": self.rewards_,
-                                                               "td_targets": self.td_targets_,
-                                                               "advantages": self.advantages_})
-                                          .shuffle(buffer_size=1000)
-                                          .batch(MINIBATCH_SIZE, drop_remainder=True)
+            dataset_dict = {"observations": self.observations_,
+                            "actions": self.actions_,
+                            "rewards": self.rewards_,
+                            "td_targets": self.td_targets_,
+                            "advantages": self.advantages_}
+            self.dataset = tf.data.Dataset.from_tensor_slices(dataset_dict).shuffle(buffer_size=1000).batch(MINIBATCH_SIZE, drop_remainder=True)
             self.iterator = self.dataset.make_initializable_iterator()
             self.batch = self.iterator.get_next()
 
@@ -146,12 +148,12 @@ class ActorCritic:
             net = layers.flatten(net)
             net = layers.fully_connected(net, 128)
 
-            logits = layers.dense(net, self.output_shape,
-                                  kernel_initializer=Initializer.normalized_columns_init(0.01),
-                                  kernel_regularizer=w_reg,
-                                  name='pi_logits')
+            logits = layers.fully_connected(net, self.output_shape,
+                                  weights_initializer=Initializer.normalized_columns_init(0.01),
+                                  weights_regularizer=w_reg,
+                                  scope='pi_logits')
             dist = tf.nn.softmax(logits, name='action')
-            policy_dist = tf.reshape(dist, [batch_size, self.output_shape])
+            policy_dist = tf.reshape(dist, [-1, self.output_shape])
 
         vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=name)
         return policy_dist, vars
@@ -170,10 +172,12 @@ class ActorCritic:
                                 padding='SAME')
             net = layers.flatten(net)
 
-            critic = layers.dense(net, 1,
-                                  kernel_initializer=Initializer.normalized_columns_init(1.0),
-                                  kernel_regularizer=w_reg, name="critic_out")
-            critic = tf.reshape(critic, [batch_size])
+            critic = layers.fully_connected(net, 1,
+                                  weights_initializer=Initializer.normalized_columns_init(1.0),
+                                  weights_regularizer=w_reg,
+                                  activation_fn=None,
+                                  scope="critic_out")
+            critic = tf.reshape(critic, [-1])
 
         vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=name)
         return critic, vars
@@ -216,6 +220,8 @@ class ActorCritic:
 
             summaries = []
             for grad, var in grads:
+                if grad is None:
+                    continue
                 var_name = var.name + '_grad'
                 var_name = var_name.replace(':', '_')
                 summaries.append(tf.summary.histogram(var_name, grad))
@@ -224,7 +230,8 @@ class ActorCritic:
     def feed_forward(self, states):
         feed_dict = {self.observations_: states}
 
-        action, _, values = self.sess.run([self.eval_distribution]+self.evaluate, feed_dict)
+        action, values = self.sess.run(self.evaluate, feed_dict)
+        action, _, values = self.sess.run([self.action_sampling]+self.evaluate, feed_dict)
 
         return action, values
 

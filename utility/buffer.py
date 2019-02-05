@@ -83,7 +83,7 @@ class Trajectory:
             original_list.extend(new_list)
 
     def clear(self):
-        self.buffer = [[] for _ in range(depth)]
+        self.buffer = [[] for _ in self.buffer]
 
     def nparray(self):
         return tuple(np.stack(l) for l in self.buffer)
