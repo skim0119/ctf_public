@@ -16,7 +16,14 @@ SELECTED = CONST.SELECTED         # 10
 COMPLETED = CONST.COMPLETED        # 11
 
 
-def one_hot_encoder(state, agents, vision_radius=9, reverse=False, flatten=False):
+class fake_agent:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+    def get_loc(self):
+        return (self.x, self.y)
+
+def one_hot_encoder(state, agents=None, vision_radius=9, reverse=False, flatten=False, locs=None):
     """Encoding pipeline for CtF state to one-hot representation
 
     6-channel one-hot representation of state.
@@ -26,10 +33,15 @@ def one_hot_encoder(state, agents, vision_radius=9, reverse=False, flatten=False
     :param state: CtF state in raw format
     :param agents: Agent list of CtF environment
     :param vision_radius: Size of the vision range (default=9)`
-    :param reverse:Reverse the color. Used for red-perspective (default=False)
+    :param reverse: Reverse the color. Used for red-perspective (default=False)
+    :param flatten: Return flattened representation (for array output)
+    :param locs: Provide locations instead of agents. (agents must be None)
 
     :return oh_state: One-hot encoded state
     """
+    if agents is None:
+        assert locs is not None
+        agents = [fake_agent(x,y) for x,y in locs]
 
     vision_lx = 2 * vision_radius + 1
     vision_ly = 2 * vision_radius + 1

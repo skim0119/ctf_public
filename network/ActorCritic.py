@@ -228,6 +228,10 @@ class ActorCritic:
     def run_network(self, feed_dict):
         a_probs, critic = self.sess.run([self.actor, self.critic], feed_dict)
         return [np.random.choice(self.action_size, p=prob/sum(prob)) for prob in a_probs], critic
+    
+    def run_sample(self, feed_dict):
+        a_probs = self.sess.run(self.actor, feed_dict)
+        return a_probs
 
     def update_global(self, feed_dict):
         self.sess.run(self.update_ops, feed_dict)
