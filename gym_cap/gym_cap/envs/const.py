@@ -18,7 +18,7 @@ UGV_A_RANGE = 2
 RL_SUGGESTIONS = False
 
 STOCH_TRANSITIONS = False
-STOCH_ATTACK = True # False
+STOCH_ATTACK = False
 STOCH_ZONES = True 
 
 # MapConst
