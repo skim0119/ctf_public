@@ -5,7 +5,9 @@ import tensorflow.contrib.layers as layers
 import numpy as np
 
 # Network configuration
-MINIBATCH_SIZE = 512
+MINIBATCH_SIZE = 256
+SHUFFLE_BUFFER = 1000
+PREFETCH_BUFFER = 256
 L2_REGULARIZATION = 0.001
 
 
@@ -129,7 +131,7 @@ class ActorCritic:
                             "rewards": self.rewards_,
                             "td_targets": self.td_targets_,
                             "advantages": self.advantages_}
-            self.dataset = tf.data.Dataset.from_tensor_slices(dataset_dict).shuffle(buffer_size=1000).batch(MINIBATCH_SIZE, drop_remainder=True)
+            self.dataset = tf.data.Dataset.from_tensor_slices(dataset_dict).shuffle(buffer_size=SHUFFLE_BUFFER).batch(MINIBATCH_SIZE, drop_remainder=True).prefetch(buffer_size=PREFETCH_BUFFER)
             self.iterator = self.dataset.make_initializable_iterator()
             self.batch = self.iterator.get_next()
 

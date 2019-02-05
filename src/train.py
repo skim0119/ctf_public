@@ -40,7 +40,7 @@ VISION_DX, VISION_DY = 2*VISION_RANGE+1, 2*VISION_RANGE+1
 INPUT_SHAPE = [None,VISION_DX,VISION_DY,N_CHANNEL]
 ACTION_SHAPE = config.getint('DEFAULT','ACTION_SPACE')
 
-BATCH_SIZE = 8192
+BATCH_SIZE = 1024 
 NUM_AGENT = CONST.NUM_BLUE
 NUM_RED = CONST.NUM_RED
 
@@ -103,21 +103,22 @@ class Worker():
         for episode in range(self.episode_num + 1):
             self.progbar.update(episode)
             cd_r, r, l, s, summary_ = self.rollout(episode=episode)
+            if summary_ is not None:
+                last_none_summary = summary_
 
             Worker.global_ep_rewards.append(cd_r)
             Worker.global_rewards.append(r)
             Worker.global_length.append(l)
             Worker.global_succeed.append(s)
 
-            if summary_ != None or (episode % save_stat_frequency == 0 and episode != 0):
+            if episode % save_stat_frequency == 0 and episode != 0:
                 summary = tf.Summary()
                 summary.value.add(tag='Records/mean_reward', simple_value=Worker.global_rewards())
                 summary.value.add(tag='Records/mean_length', simple_value=Worker.global_length())
                 summary.value.add(tag='Records/mean_succeed', simple_value=Worker.global_succeed())
                 summary.value.add(tag='Records/mean_episode_reward', simple_value=Worker.global_ep_rewards())
                 self.writer.add_summary(summary, episode)
-                if summary_ is not None:
-                    self.writer.add_summary(summary_,episode)
+                self.writer.add_summary(last_none_summary,episode)
                 self.writer.flush()
 
             if episode % save_network_frequency == 0 and episode != 0:
@@ -198,10 +199,10 @@ class Worker():
             # Update ppo
             if len(self.experience_buffer) >= BATCH_SIZE:
                 stime = time.time()
-                graph_summary, global_step = self.network.feed_backward(self.experience_buffer.nparray(), epochs=5)
+                graph_summary, global_step = self.network.feed_backward(self.experience_buffer.nparray(), epochs=1)
                 self.experience_buffer.clear()
                 etime = time.time()
-                print(f'\nTraining Duration: {etime-stime} sec')
+                #print(f'\nTraining Duration: {etime-stime} sec')
 
         return ep_r, env_reward, step, self.env.blue_win, graph_summary
 
