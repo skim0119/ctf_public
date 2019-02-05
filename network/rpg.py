@@ -5,8 +5,8 @@ import tensorflow.layers as layers
 import numpy as np
 
 # Network configuration
-RNN_UNIT_SIZE = 32
-RNN_NUM_LAYERS = 3
+RNN_UNIT_SIZE = 64
+RNN_NUM_LAYERS = 1
 
 MINIBATCH_SIZE = 8
 L2_REGULARIZATION = 0.001
@@ -149,7 +149,7 @@ class RPG:
         return policy_dist, vars, init_state, final_state
 
     def _build_baseline_network(self, state_in, name, reuse=False, batch_size=MINIBATCH_SIZE):
-        w_reg = tf.contrib.layers.l2_regularizer(L2_REGULARIZATION)
+        w_reg = None #tf.contrib.layers.l2_regularizer(L2_REGULARIZATION)
 
         with tf.variable_scope(name, reuse=reuse):
             state_in = layers.dense(state_in, RNN_UNIT_SIZE)
