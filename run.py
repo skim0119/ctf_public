@@ -58,10 +58,10 @@ def parse_args(argv):
     # Set Variables
     for opt, arg in opts:
         if opt == "--epoch":
-            epoch = arg
+            epoch = int(arg)
             print(f'Epoch set to {arg}')
         elif opt == "--append-train":
-            if arg:
+            if arg == 'True':
                 new_train = False
                 print('Continue Training on Existing Weight')
             else:
@@ -80,7 +80,8 @@ def parse_args(argv):
 
 if __name__ == "__main__":
     par = parse_args(sys.argv[1:])
-    epoch = int(par['epoch'])
+    epoch = par['epoch']
+    new_train = par['new_train']
 
     reset_output_directory(par['new_train'])
 
@@ -88,7 +89,7 @@ if __name__ == "__main__":
     sdate = datetime.datetime.now()
     print('Start Program ' + sdate.strftime("%Y-%m-%d %H:%M"))
 
-    worker = Worker(epoch)
+    worker = Worker(epoch, new_network=new_train)
     worker.run()
 
     print(f'End {datetime.datetime.now().strftime("%Y-%m-%d %H:%M")}')

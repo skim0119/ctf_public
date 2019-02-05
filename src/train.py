@@ -1,5 +1,7 @@
 import os
 import sys
+# os.chdir('./..')
+sys.path.insert(0, "./src/")
 
 import configparser
 
@@ -24,8 +26,6 @@ from network import ActorCritic as Network
 
 # import imageio
 
-# os.chdir('./..')
-sys.path.insert(0, "./src/")
 
 # Configuration Parser
 config = configparser.ConfigParser()
@@ -56,8 +56,8 @@ ma_step = config.getint('TRAINING', 'MOVING_AVERAGE_SIZE')
 LOG_PATH = './logs/run'
 MODEL_PATH = './model'
 RENDER_PATH = './render'
-save_network_frequency = config.getint('TRAINING', 'SAVE_NETWORK_FREQ')
-save_stat_frequency = config.getint('TRAINING', 'SAVE_STATISTICS_FREQ')
+save_network_frequency = 128#config.getint('TRAINING', 'SAVE_NETWORK_FREQ')
+save_stat_frequency = 128#config.getint('TRAINING', 'SAVE_STATISTICS_FREQ')
 
 
 class Worker():
@@ -69,14 +69,15 @@ class Worker():
 
     global_episode = None
 
-    def __init__(self, episode_num, name=None):
+    def __init__(self, episode_num, new_network=True, name=None):
         # Initialize TF Session
         self.network = Network(input_shape=INPUT_SHAPE,
                                output_shape=ACTION_SHAPE,
                                lr_actor=LR_A,
                                lr_critic=LR_C,
                                entropy_beta=0.05,
-                               name=name)
+                               name=name,
+                               new_network=new_network)
         Worker.global_episode = self.network.global_step
 
         self.writer = tf.summary.FileWriter(LOG_PATH, self.network.graph)

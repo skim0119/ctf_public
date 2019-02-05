@@ -38,6 +38,7 @@ class ActorCritic:
                  entropy_beta=0.01,
                  name=None,
                  sess=None,
+                 new_network=True
                  ):
         # Class Environment
         self.graph = tf.Graph()
@@ -101,8 +102,11 @@ class ActorCritic:
                 self.sess = tf.Session(graph=self.graph, config=session_config)
                 print(self.sess.list_devices())
 
-            ckpt = tf.train.get_checkpoint_state('model/')
-            if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
+            ckpt = tf.train.get_checkpoint_state('./model')
+            if new_network:
+                self.sess.run(tf.global_variables_initializer())
+                print("Initialized Variables")
+            elif ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
                 self.saver.restore(self.sess, ckpt.model_checkpoint_path)
                 print("Load Model : ", ckpt.model_checkpoint_path)
             else:
