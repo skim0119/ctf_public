@@ -6,7 +6,6 @@ sys.path.insert(0, "./src/")
 import configparser
 
 import tensorflow as tf
-import matplotlib.pyplot as plt
 
 import time
 import gym, gym_cap
@@ -26,7 +25,7 @@ import policy.zeros as zeros
 
 from network import ActorCritic as Network
 
-import imageio
+# import imageio
 
 
 # Configuration Parser
