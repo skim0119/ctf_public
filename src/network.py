@@ -100,7 +100,8 @@ class ActorCritic:
                 session_config = tf.ConfigProto(gpu_options=gpu_options)
                 # log_device_placement=True)
                 self.sess = tf.Session(graph=self.graph, config=session_config)
-                print(self.sess.list_devices())
+                for dev in self.sess.list_devices():
+                    print(dev)
 
             ckpt = tf.train.get_checkpoint_state('./model')
             if new_network:
