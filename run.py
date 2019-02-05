@@ -80,7 +80,7 @@ def parse_args(argv):
 
 if __name__ == "__main__":
     par = parse_args(sys.argv[1:])
-    epoch = par['epoch']
+    epoch = int(par['epoch'])
 
     reset_output_directory(par['new_train'])
 
