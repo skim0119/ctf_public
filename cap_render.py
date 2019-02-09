@@ -27,9 +27,9 @@ env = gym.make("cap-v0").unwrapped  # initialize the environment
 #                                         output_name='global/actor/fully_connected/Softmax:0',
 #                                         color='red'
 #                                         )
-policy_red = policy.roomba.PolicyGen(env.get_map, env.get_team_red)
+policy_red = policy.zeros.PolicyGen(env.get_map, env.get_team_red)
 policy_blue = policy.policy_A3C.PolicyGen(env.get_map, env.get_team_blue,
-                                          model_dir='model/A3C_CTF_Roomba/',
+                                          model_dir='model/A3C_CTF_Zero/',
                                           input_name='global/state:0',
                                           output_name='global/actor/fully_connected_1/Softmax:0'
                                           )
