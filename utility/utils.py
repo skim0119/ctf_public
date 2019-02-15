@@ -180,67 +180,70 @@ class MovingAverage:
         self.queue.clear()
 
 
-class Experience_buffer:
-    """Experience_buffer
-    Experience buffer use for storing tuples for MDP.
-    Support returning and shuffling features
+class ExperienceBuffer():
 
-    Method:
-        __init__ (int, int)
-        __len__
-        add (list)
-        add_element (object)
-        flush
-        empty
-        sample (int, bool)
-        pop (int, bool)
-    """
-
-    def __init__(self, experience_shape=4, buffer_size=50000):
-        self.buffer = []
-        self.buffer_size = buffer_size
-        self.experience_shape = experience_shape
-
-    def __len__(self):
-        return len(self.buffer)
+    def __init__(self, max_buffer_size, batch_size):
+        self.size = 0
+        self.max_buffer_size = max_buffer_size
+        self.experiences = []
+        self.batch_size = batch_size
 
     def add(self, experience):
-        if len(self.buffer) + len(experience) >= self.buffer_size:
-            self.buffer[0:(len(experience) + len(self.buffer)) - self.buffer_size] = []
-        self.buffer.extend(experience)
+        assert len(experience) == 7, 'Experience must be of form (s, a, r, s_, g, t, grip_info\')'
+        assert type(experience[5]) == bool
 
-    def add_element(self, sample):
-        self.buffer.append(sample)
+        self.experiences.append(experience)
+        self.size += 1
 
-    def flush(self):
-        # Return the remaining buffer and reset.
-        batch = np.reshape(np.array(self.buffer), [len(self.buffer), self.experience_shape])
-        self.buffer = []
-        return batch
+        # If replay buffer is filled, remove a percentage of replay buffer.
+        # Only removing a single transition slows down performance
+        if self.size >= self.max_buffer_size:
+            beg_index = int(np.floor(self.max_buffer_size / 6))
+            self.experiences = self.experiences[beg_index:]
+            self.size -= beg_index
 
-    def empty(self):
-        return len(self.buffer) == 0
+    def get_batch(self, batch_size=None):
+        if batch_size is None:
+            batch_size = self.batch_size
+        states, actions, rewards, new_states, goals, is_terminals = [], [], [], [], [], []
+        dist = np.random.randint(0, high=self.size, size=batch_size)
 
-    def sample(self, size=2000, shuffle=False):
-        if shuffle:
-            random.shuffle(self.buffer)
+        for i in dist:
+            states.append(self.experiences[i][0])
+            actions.append(self.experiences[i][1])
+            rewards.append(self.experiences[i][2])
+            new_states.append(self.experiences[i][3])
+            goals.append(self.experiences[i][4])
+            is_terminals.append(self.experiences[i][5])
 
-        if size > len(self.buffer):
-            return np.array(self.buffer)
-        else:
-            # return np.array([self.buffer.pop(random.randrange(len(self.buffer))) for _ in range(size)])
-            return np.reshape(np.array(random.sample(self.buffer, size)), [size, self.experience_shape])
+        return states, actions, rewards, new_states, goals, is_terminals
 
-    def pop(self, size, shuffle=False):
-        # Pop the first `size` items in order (queue).
-        if shuffle:
-            random.shuffle(self.buffer)
+def store_args(method):
+    """Stores provided method args as instance attributes.
+    Sourced: Baselines
+    """
+    argspec = inspect.getfullargspec(method)
+    defaults = {}
+    if argspec.defaults is not None:
+        defaults = dict(
+            zip(argspec.args[-len(argspec.defaults):], argspec.defaults))
+    if argspec.kwonlydefaults is not None:
+        defaults.update(argspec.kwonlydefaults)
+    arg_names = argspec.args[1:]
 
-        i = min(len(self.buffer), size)
-        batch = np.reshape(np.array(self.buffer[:i]), [i, self.experience_shape])
-        self.buffer = self.buffer[i:]
-        return batch
+    @functools.wraps(method)
+    def wrapper(*positional_args, **keyword_args):
+        self = positional_args[0]
+        # Get default arg values
+        args = defaults.copy()
+        # Add provided arg values
+        for name, value in zip(arg_names, positional_args[1:]):
+            args[name] = value
+        args.update(keyword_args)
+        self.__dict__.update(args)
+        return method(*positional_args, **keyword_args)
 
+    return wrapper
 
 if __name__ == '__main__':
     pass
