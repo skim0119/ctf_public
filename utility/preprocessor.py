@@ -29,17 +29,17 @@ MAP_COLOR = {UNKNOWN: 1, DEAD: 0,
              TEAM1_FL: 1, TEAM2_FL: -1,
              OBSTACLE: 1}
 MAP_COLOR_REVERSE = {UNKNOWN: 1, DEAD: 0,
-             TEAM1_BG: 1, TEAM2_BG: 0,
-             TEAM1_AG: -1, TEAM2_AG: 1,
-             TEAM1_UAV: -1, TEAM2_UAV: 1,
-             TEAM1_FL: -1, TEAM2_FL: 1,
-             OBSTACLE: 1}
+                     TEAM1_BG: 1, TEAM2_BG: 0,
+                     TEAM1_AG: -1, TEAM2_AG: 1,
+                     TEAM1_UAV: -1, TEAM2_UAV: 1,
+                     TEAM1_FL: -1, TEAM2_FL: 1,
+                     OBSTACLE: 1}
 
 
 def one_hot_encoder_v3(state, coord, vision_radius=19, reverse=False, flatten=True, normalize_channel=True):
     """Encoding pipeline for CtF state to one-hot representation
 
-    Only representing for single agent at coordinate. 
+    Only representing for single agent at coordinate.
     6-channel one-hot representation of state.
     State is not binary: team2 is represented with -1.
     Channels are not symmetrical.
@@ -89,19 +89,17 @@ def one_hot_encoder_v3(state, coord, vision_radius=19, reverse=False, flatten=Tr
     # Normalize
     if normalize_channel:
         for channel in range(n_channel):
-            mean = np.mean(oh_state[:,:,channel])
-            std = np.std(oh_state[:,:,channel])
-            oh_state[:,:,channel] = (oh_state[:,:,channel]-mean)/std
+            mean = np.mean(oh_state[:, :, channel])
+            std = np.std(oh_state[:, :, channel])
+            oh_state[:, :, channel] = (oh_state[:, :, channel] - mean) / std
 
     # Find goal
-    gloc = np.where(oh_state[:,:,4]==1)
+    gloc = np.where(oh_state[:, :, 4] == 1)
     gloc = (gloc[0][0], gloc[1][0])
-
 
     if flatten:
         oh_state = np.flatten(oh_state, (-1,))
     return oh_state, gloc
-
 
 
 def one_hot_encoder(state, agents, vision_radius=9, reverse=False, flatten=False):
@@ -249,4 +247,3 @@ if __name__ == '__main__':
         s = env.reset(map_size=20)
         one_hot_encoder_v2(s, env.get_team_blue)
     print(f'Finish testing for one-hot-encoder: {time.time()-stime} sec')
-
