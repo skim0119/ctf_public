@@ -14,7 +14,6 @@ class Agent():
         # - It is double layer, but it can be multi-layer
         self.meta_controller = Network()
         self.controller = Network()
-
         self.network = Network(input_shape=INPUT_SHAPE,
                                output_shape=ACTION_SHAPE,
                                lr_actor=LR_A,
@@ -22,4 +21,3 @@ class Agent():
                                entropy_beta=0.05,
                                name=name,
                                new_network=new_network)
-

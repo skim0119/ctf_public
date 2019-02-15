@@ -2,6 +2,9 @@ import numpy as np
 import random
 import scipy.signal
 
+import inspect
+import functools
+
 """Utility methods and classes used in CtF Problem
 
 This module contains extra features and functions frequently used in Ctf Project.

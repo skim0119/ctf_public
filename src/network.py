@@ -4,11 +4,27 @@ import tensorflow.contrib.layers as layers
 
 import numpy as np
 
+from utility.utils import store_args
+
 # Network configuration
-MINIBATCH_SIZE = 256
-SHUFFLE_BUFFER = 1000
-PREFETCH_BUFFER = 256
 L2_REGULARIZATION = 0.001
+
+
+def nn_dense(input, layers_sizes, flatten=False, reuse=False, name=""):
+    """Creates a simple layers of fully connected neural network """
+    for i, size in enumerate(layers_sizes):
+        activation = tf.nn.relu if i < len(layers_sizes) - 1 else None
+        input = tf.layers.dense(inputs=input,
+                                units=size,
+                                kernel_initializer=tf.contrib.layers.xavier_initializer(),
+                                reuse=reuse,
+                                name=name + '_' + str(i))
+        if activation:
+            input = activation(input)
+    if flatten:
+        assert layers_sizes[-1] == 1
+        input = tf.reshape(input, [-1])
+    return input
 
 
 class Initializer:
@@ -30,54 +46,35 @@ class ActorCritic:
     It takes 2D multi-channel image as an input, and gives 5 probability of action
     """
 
+    @store_args
     def __init__(self,
                  input_shape,
                  output_shape,
                  lr_actor=1e-4,
                  lr_critic=1e-4,
-                 entropy_beta=0.01,
+                 entropy_beta=0,  # default: does not include entropy in calculation
                  name=None,
                  sess=None,
-                 new_network=True
+                 retrain=True  # if true, reset the graph regardless of saved data
                  ):
         # Class Environment
         self.graph = tf.Graph()
-        self.sess = sess
-        self.name = name
-
-        # Parameters & Configs
-        self.input_shape = input_shape
-        self.output_shape = output_shape
-        self.lr_actor = lr_actor
-        self.lr_critic = lr_critic
-        self.entropy_beta = entropy_beta
 
         # Build Graph
         with self.graph.as_default():
             self._build_placeholders()
-            self._build_dataset()
 
-            # Policy Network for Backpropagation
-            policy, policy_vars = self._build_actor_network(self.batch["observations"], 'actor')
-            critic, critic_vars = self._build_critic_network(self.batch["observations"], 'critic')
-            self.result = [policy, critic]
-            self.actor_var = policy_vars
-            self.critic_var = critic_vars
-            self.graph_var = policy_vars + critic_vars
-            self.prob_distribution = tf.distributions.Categorical(probs=policy)
-
-            # Policy Network for Forward Pass (Same Weight)
-            policy_eval, _ = self._build_actor_network(self.observations_,
-                                                       'actor',
-                                                       reuse=True,
-                                                       batch_size=1)
-            critic_eval, _ = self._build_critic_network(self.observations_,
-                                                        'critic',
-                                                        reuse=True,
-                                                        batch_size=1)
-            self.evaluate = [policy_eval, critic_eval]
-            self.eval_distribution = tf.distributions.Categorical(probs=policy_eval)
-            self.action_sampling = self.eval_distribution.sample()
+            # Build network
+            self.policy, self.policy_vars = self._build_actor_network(state_in=self.observations_,
+                                                                      goal_in=self.goals_,
+                                                                      name='actor')
+            self.critic, self.critic_vars = self._build_critic_network(state_in=self.observations_,
+                                                                       goal_in=self.goals_,
+                                                                       name='critic')
+            self.result = [self.policy, self.critic]
+            self.graph_var = self.policy_vars + self.critic_vars
+            self.prob_distribution = tf.distributions.Categorical(probs=self.policy)
+            self.action_sampling = self.prob_distribution.sample()
 
             # Build Summary and Training Operations
             variable_summary = []
@@ -85,8 +82,8 @@ class ActorCritic:
                 var_name = var.name + '_var'
                 var_name = var_name.replace(':', '_')
                 variable_summary.append(tf.summary.histogram(var_name, var))
-
             self.var_summary = tf.summary.merge(variable_summary)
+
             self.loss_summary = self._build_losses()
             self.grad_summary = self._build_pipeline()
 
@@ -100,11 +97,11 @@ class ActorCritic:
                 session_config = tf.ConfigProto(gpu_options=gpu_options)
                 # log_device_placement=True)
                 self.sess = tf.Session(graph=self.graph, config=session_config)
-                for dev in self.sess.list_devices():
+                for dev in self.sess.list_devices():  # Verbose: list all device
                     print(dev)
 
             ckpt = tf.train.get_checkpoint_state('./model')
-            if new_network:
+            if retrain:
                 self.sess.run(tf.global_variables_initializer())
                 print("Initialized Variables")
             elif ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
@@ -122,68 +119,27 @@ class ActorCritic:
     def _build_placeholders(self):
         """ Define the placeholders """
         self.observations_ = tf.placeholder(tf.float32, self.input_shape, 'observations')
+        self.goals_ = tf.placeholder(tf.float32, self.input_shape, 'goals')
         self.actions_ = tf.placeholder(tf.int32, [None], 'actions')
         self.rewards_ = tf.placeholder(tf.float32, [None], 'rewards')
         self.td_targets_ = tf.placeholder(tf.float32, [None], 'td_target')
         self.advantages_ = tf.placeholder(tf.float32, [None], 'baselines')
 
-    def _build_dataset(self):
-        """ Use the TensorFlow Dataset API """
-        with tf.device('/cpu:0'):
-            dataset_dict = {"observations": self.observations_,
-                            "actions": self.actions_,
-                            "rewards": self.rewards_,
-                            "td_targets": self.td_targets_,
-                            "advantages": self.advantages_}
-            self.dataset = tf.data.Dataset.from_tensor_slices(dataset_dict).shuffle(buffer_size=SHUFFLE_BUFFER).batch(
-                MINIBATCH_SIZE, drop_remainder=True).prefetch(buffer_size=PREFETCH_BUFFER)
-            self.iterator = self.dataset.make_initializable_iterator()
-            self.batch = self.iterator.get_next()
-
-    def _build_actor_network(self, state_in, name, reuse=False, batch_size=MINIBATCH_SIZE):
-        w_reg = None
-
+    def _build_actor_network(self, state_in, goal_in, name, reuse=False):
         with tf.variable_scope(name, reuse=reuse):
-            net = state_in
-            net = layers.conv2d(net, 32, [5, 5],
-                                activation_fn=tf.nn.relu,
-                                padding='SAME')
-            net = layers.max_pool2d(net, [2, 2])
-            net = layers.conv2d(net, 64, [3, 3],
-                                activation_fn=tf.nn.relu,
-                                padding='SAME')
-            net = layers.flatten(net)
-            net = layers.fully_connected(net, 128)
-
-            logits = layers.fully_connected(net, self.output_shape,
-                                            weights_initializer=Initializer.normalized_columns_init(0.01),
-                                            weights_regularizer=w_reg,
-                                            scope='pi_logits')
+            net = tf.concat([state_in, goal_in], 1)
+            logits = nn_dense(net, [512, 256, self.output_shape], name)
             dist = tf.nn.softmax(logits, name='action')
-            policy_dist = tf.reshape(dist, [-1, self.output_shape])
 
         vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=name)
-        return policy_dist, vars
+        return dist, vars
 
-    def _build_critic_network(self, state_in, name, reuse=False, batch_size=MINIBATCH_SIZE):
-        w_reg = tf.contrib.layers.l2_regularizer(L2_REGULARIZATION)
-
+    def _build_critic_network(self, state_in, goal_in, name, reuse=False):
         with tf.variable_scope(name, reuse=reuse):
-            net = state_in
-            net = layers.conv2d(net, 32, [5, 5],
-                                activation_fn=tf.nn.relu,
-                                padding='SAME')
-            net = layers.max_pool2d(net, [2, 2])
-            net = layers.conv2d(net, 64, [3, 3],
-                                activation_fn=tf.nn.relu,
-                                padding='SAME')
-            net = layers.flatten(net)
+            phi = nn_dense(state_in, [512, 256, 1], name)
+            psi = nn_dense(goal_in, [512, 256, 1], name, reuse=True)
 
-            critic = layers.fully_connected(net, 1,
-                                            weights_initializer=Initializer.normalized_columns_init(1.0),
-                                            weights_regularizer=w_reg,
-                                            activation_fn=None,
-                                            scope="critic_out")
+            critic = np.dot(phi, tf.transpose(psi))
             critic = tf.reshape(critic, [-1])
 
         vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=name)
@@ -194,7 +150,7 @@ class ActorCritic:
             self.global_step = tf.train.get_or_create_global_step()
 
             with tf.variable_scope('entropy'):
-                #self.entropy = -tf.reduce_mean(self.result[0] * tf.log(self.result[0]), name='entropy')
+                # self.entropy = -tf.reduce_mean(self.result[0] * tf.log(self.result[0]), name='entropy')
                 self.entropy = tf.reduce_mean(self.prob_distribution.entropy())
 
             with tf.variable_scope('actor'):
@@ -212,7 +168,7 @@ class ActorCritic:
             summaries.append(tf.summary.scalar("critic_loss", self.critic_loss))
             summaries.append(tf.summary.scalar("entropy", self.entropy))
 
-        return tf.summary.merge(summaries)
+            return tf.summary.merge(summaries)
 
     def _build_pipeline(self):
         with tf.variable_scope('train'):
