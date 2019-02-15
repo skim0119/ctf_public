@@ -3,6 +3,7 @@ import tensorflow as tf
 import tensorflow.contrib.layers as layers
 
 import numpy as np
+import random
 
 from utility.utils import store_args
 
@@ -190,38 +191,48 @@ class ActorCritic:
                 summaries.append(tf.summary.histogram(var_name, grad))
             return tf.summary.merge(summaries)
 
-    def feed_forward(self, states):
-        feed_dict = {self.observations_: states}
+    def feed_forward(self, states, goals):
+        feed_dict = {self.observations_: states,
+                     self.goals_: goals}
 
         action, values = self.sess.run(self.evaluate, feed_dict)
         action, _, values = self.sess.run([self.action_sampling] + self.evaluate, feed_dict)
 
         return action, values
 
-    def feed_backward(self, experience_buffer, epochs=10):
+    def feed_backward(self, experience_buffer, epochs=10, batch_size=256):
         """feed_backward
 
         :param experience_buffer: (np.array)
             Experience buffer in form of [[state][action][reward][td][advantage]]
         :param epochs: Number of epoch training
         """
-        observations, actions, rewards, td_diffs, advantages = experience_buffer
+        exp_length = len(experience_buffer)
+
         for ep in range(epochs):
-            feed_dict = {self.observations_: observations,
-                         self.actions_: actions,
-                         self.rewards_: rewards,
-                         self.td_targets_: td_diffs,
-                         self.advantages_: advantages}
-            self.sess.run(self.iterator.initializer, feed_dict=feed_dict)
+            exp_indices = list(range(exp_length))
+            remaining_length = exp_length
+            while remaining_length:
+                if remaining_length < batch_size:
+                    indices = exp_indices
+                    remaining_length = 0
+                else:
+                    indices = random.sample(exp_indices, batch_size)
+                    remaining_length -= batch_size
 
-            summary_ = tf.summary.merge([self.var_summary, self.loss_summary, self.grad_summary])
-            train_ops = [summary_, self.global_step, self.train_op]
+                # Draw batch samples
+                observations, goals, actions, rewards, td_diffs, advantages = experience_buffer[indices]
+                for ind in indices:
+                    exp_indices.remove(ind)
 
-            summary = None
-            step = 0
-            while True:  # run until batch run out
-                try:
-                    summary, step, _ = self.sess.run(train_ops)
-                except tf.errors.OutOfRangeError:
-                    break
+                feed_dict = {self.observations_: observations,
+                             self.goals_: goals,
+                             self.actions_: actions,
+                             self.rewards_: rewards,
+                             self.td_targets_: td_diffs,
+                             self.advantages_: advantages}
+
+                summary_ = tf.summary.merge([self.var_summary, self.loss_summary, self.grad_summary])
+                train_ops = [summary_, self.global_step, self.train_op]
+                summary, step, _ = self.sess.run(train_ops, feed_dict)
         return summary, step
