@@ -56,8 +56,8 @@ ma_step = config.getint('TRAINING', 'MOVING_AVERAGE_SIZE')
 LOG_PATH = './logs/run'
 MODEL_PATH = './model'
 RENDER_PATH = './render'
-save_network_frequency = 128#config.getint('TRAINING', 'SAVE_NETWORK_FREQ')
-save_stat_frequency = 128#config.getint('TRAINING', 'SAVE_STATISTICS_FREQ')
+save_network_frequency = config.getint('TRAINING', 'SAVE_NETWORK_FREQ')
+save_stat_frequency = config.getint('TRAINING', 'SAVE_STATISTICS_FREQ')
 
 
 class Worker():
@@ -120,7 +120,7 @@ class Worker():
                 self.writer.flush()
 
             if episode % save_network_frequency == 0 and episode != 0:
-                self.network.save(MODEL_PATH + '/ctf_policy.ckpt', global_step=Worker.global_step)
+                self.network.save(MODEL_PATH + '/ctf_policy.ckpt', global_step=self.network.global_step)
 
     def rollout(self, episode=0, train=True):
         # Initialize run
