@@ -21,6 +21,7 @@ model_archives
 *.egg
 *.swp
 test_*
+clips/
 
 .DS_Store
 __pycache__
