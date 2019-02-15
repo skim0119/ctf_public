@@ -15,6 +15,94 @@ DEAD = CONST.DEAD             # 9
 SELECTED = CONST.SELECTED         # 10
 COMPLETED = CONST.COMPLETED        # 11
 
+# team 1 : (1), team 2 : (-1), map elements: (0)
+MAP_CHANNEL = {UNKNOWN: 0, DEAD: 0,
+               TEAM1_BG: 1, TEAM2_BG: 1,
+               TEAM1_AG: 2, TEAM2_AG: 2,
+               TEAM1_UAV: 3, TEAM2_UAV: 3,
+               TEAM1_FL: 4, TEAM2_FL: 4,
+               OBSTACLE: 5}
+MAP_COLOR = {UNKNOWN: 1, DEAD: 0,
+             TEAM1_BG: 0, TEAM2_BG: 1,
+             TEAM1_AG: 1, TEAM2_AG: -1,
+             TEAM1_UAV: 1, TEAM2_UAV: -1,
+             TEAM1_FL: 1, TEAM2_FL: -1,
+             OBSTACLE: 1}
+MAP_COLOR_REVERSE = {UNKNOWN: 1, DEAD: 0,
+             TEAM1_BG: 1, TEAM2_BG: 0,
+             TEAM1_AG: -1, TEAM2_AG: 1,
+             TEAM1_UAV: -1, TEAM2_UAV: 1,
+             TEAM1_FL: -1, TEAM2_FL: 1,
+             OBSTACLE: 1}
+
+
+def one_hot_encoder_v3(state, coord, vision_radius=19, reverse=False, flatten=True, normalize_channel=True):
+    """Encoding pipeline for CtF state to one-hot representation
+
+    Only representing for single agent at coordinate. 
+    6-channel one-hot representation of state.
+    State is not binary: team2 is represented with -1.
+    Channels are not symmetrical.
+
+    :param state: CtF state in raw format
+    :param coord (Tuple(int,int)): Center Coordinate (x,y)
+    :param vision_radius: Size of the vision range (default=9)`
+    :param reverse:Reverse the color. Used for red-perspective (default=True)
+    :param flatten:
+    :param normalize_channel:
+
+    :return oh_state: One-hot encoded state
+    :return goal_state : Final Goal (relative coordinate of the flag)
+    """
+
+    n_channel = 6
+
+    vision_lx = 2 * vision_radius + 1
+    vision_ly = 2 * vision_radius + 1
+    oh_state = np.zeros((vision_lx, vision_ly, 6), np.float)
+
+    map_channel = MAP_CHANNEL
+    if reverse:
+        map_color = MAP_COLOR_REVERSE
+    else:
+        map_color = MAP_COLOR
+
+    # Expand the observation with wall to avoid dealing with the boundary
+    sx, sy = state.shape
+    _state = np.full((sx + 2 * vision_radius, sy + 2 * vision_radius), OBSTACLE)
+    _state[vision_radius:vision_radius + sx, vision_radius:vision_radius + sy] = state
+    state = _state
+
+    # Initialize Variables
+    x, y = coord
+    x += vision_radius
+    y += vision_radius
+    vision = state[x - vision_radius:x + vision_radius + 1, y - vision_radius:y + vision_radius + 1]  # extract view
+
+    # FULL MATRIX OPERATION
+    for channel, val in map_color.items():
+        if val == 1:
+            oh_state[:, :, map_channel[channel]] += (vision == channel).astype(np.int32)
+        elif val == -1:
+            oh_state[:, :, map_channel[channel]] -= (vision == channel).astype(np.int32)
+
+    # Normalize
+    if normalize_channel:
+        for channel in range(n_channel):
+            mean = np.mean(oh_state[:,:,channel])
+            std = np.std(oh_state[:,:,channel])
+            oh_state[:,:,channel] = (oh_state[:,:,channel]-mean)/std
+
+    # Find goal
+    gloc = np.where(oh_state[:,:,4]==1)
+    gloc = (gloc[0][0], gloc[1][0])
+
+
+    if flatten:
+        oh_state = np.flatten(oh_state, (-1,))
+    return oh_state, gloc
+
+
 
 def one_hot_encoder(state, agents, vision_radius=9, reverse=False, flatten=False):
     """Encoding pipeline for CtF state to one-hot representation
@@ -135,7 +223,7 @@ def one_hot_encoder_v2(state, agents, vision_radius=9, reverse=False, flatten=Fa
         return oh_state
 
 
-def debug():
+if __name__ == '__main__':
     """debug
     Include testing code for above methods and classes.
     The execution will start witn __main__, and call this method.
@@ -162,6 +250,3 @@ def debug():
         one_hot_encoder_v2(s, env.get_team_blue)
     print(f'Finish testing for one-hot-encoder: {time.time()-stime} sec')
 
-
-if __name__ == '__main__':
-    debug()
