@@ -1,3 +1,4 @@
+import time
 import numpy as np
 import tensorflow as tf
 import tensorflow.contrib.layers as layers
@@ -68,7 +69,7 @@ class Agent():
         assert global_step is not None
         self.saver.save(self.sess, save_path=path, global_step=global_step)
 
-    def set_new_goals(self):
+    def set_new_goal(self):
         self.goals = np.random.randint(5,size=ctf_params['num_agent'])
 
     def get_actions(self, states, env_goals):

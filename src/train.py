@@ -73,7 +73,9 @@ class Worker():
 
             # Rollout Episode
             cd_r, r, l, s = self.rollout(episode=episode)
+            print(f'\nepisodic reward = {cd_r:.5f}, reward = {r:.5f}, length = {l}, blue_win = {s}\n')
             if len(self.experience_buffer) > BUFFER_SIZE:
+                print('Train')
                 last_none_summary = self.agent.train(self.experience_buffer)
                 self.experience_buffer.clear()
 

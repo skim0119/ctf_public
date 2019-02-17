@@ -126,10 +126,13 @@ class ActorCritic:
                 self.entropy = tf.reduce_mean(self.prob_distribution.entropy())
 
             with tf.variable_scope('actor'):
-                actions_OH = tf.one_hot(self.actions_, self.output_size)
-                obj_func = tf.log(tf.reduce_sum(self.policy * actions_OH, 1))
-                exp_v = obj_func * self.advantages_
-                self.actor_loss = -tf.reduce_mean(exp_v, name='actor_loss') - self.entropy_beta * self.entropy
+                #actions_OH = tf.one_hot(self.actions_, self.output_size)
+                #obj_func = tf.log(tf.reduce_sum(self.policy * actions_OH, 1))
+                #exp_v = obj_func * self.advantages_
+                #self.actor_loss = -tf.reduce_mean(exp_v, name='actor_loss') - self.entropy_beta * self.entropy
+
+                self.cross_entropy_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.policy, labels=self.actions_)
+                self.actor_loss = tf.reduce_mean(self.cross_entropy_loss, name='actor_loss') - self.entropy_beta * self.entropy
 
             with tf.variable_scope('critic'):
                 td_error = self.td_targets_ - self.critic
@@ -178,7 +181,9 @@ class ActorCritic:
             Experience buffer in form of [[state][action][reward][td][advantage]]
         :param epochs: Number of epoch training
         """
-        exp_length = len(experience_buffer)
+        # Draw batch samples
+        observations, actions, rewards, td_diffs, advantages, global_goal, goal_id, goal_played = experience_buffer
+        exp_length = len(observations)
 
         for ep in range(epochs):
             exp_indices = list(range(exp_length))
@@ -191,19 +196,17 @@ class ActorCritic:
                     indices = random.sample(exp_indices, batch_size)
                     remaining_length -= batch_size
 
-                # Draw batch samples
-                observations, actions, rewards, td_diffs, advantages, global_goal, goal_id, goal_played = experience_buffer[indices]
                 for ind in indices:
                     exp_indices.remove(ind)
 
-                feed_dict = {self.observations_: observations,
-                             self.goals_: goal_played,
-                             self.actions_: actions,
-                             self.rewards_: rewards,
-                             self.td_targets_: td_diffs,
-                             self.advantages_: advantages}
+                feed_dict = {self.observations_: observations[indices],
+                             self.goals_: goal_played[indices],
+                             self.actions_: actions[indices],
+                             self.rewards_: rewards[indices],
+                             self.td_targets_: td_diffs[indices],
+                             self.advantages_: advantages[indices]}
 
-                summary_ = tf.summary.merge([self.var_summary, self.loss_summary, self.grad_summary])
+                summary_ = tf.summary.merge([self.var_summary]) #, self.loss_summary, self.grad_summary])
                 train_ops = [summary_, self.train_op]
                 summary, _ = self.sess.run(train_ops, feed_dict)
         return summary
@@ -215,7 +218,9 @@ class ActorCritic:
             Experience buffer in form of [[state][action][reward][td][advantage]]
         :param epochs: Number of epoch training
         """
-        exp_length = len(experience_buffer)
+        # Draw batch samples
+        observations, actions, rewards, td_diffs, advantages, global_goal, goal_id, goal_played = experience_buffer
+        exp_length = len(observations)
 
         for ep in range(epochs):
             exp_indices = list(range(exp_length))
@@ -229,18 +234,17 @@ class ActorCritic:
                     remaining_length -= batch_size
 
                 # Draw batch samples
-                observations, actions, rewards, td_diffs, advantages, global_goal, goal_id, goal_played = experience_buffer[indices]
                 for ind in indices:
                     exp_indices.remove(ind)
 
-                feed_dict = {self.observations_: observations,
-                             self.goals_: global_goal,
-                             self.actions_: goal_id,
-                             self.rewards_: rewards,
-                             self.td_targets_: td_diffs,
-                             self.advantages_: advantages}
+                feed_dict = {self.observations_: observations[indices],
+                             self.goals_: global_goal[indices],
+                             self.actions_: goal_id[indices],
+                             self.rewards_: rewards[indices],
+                             self.td_targets_: td_diffs[indices],
+                             self.advantages_: advantages[indices]}
 
-                summary_ = tf.summary.merge([self.var_summary, self.loss_summary, self.grad_summary])
+                summary_ = tf.summary.merge([self.var_summary]) #, self.loss_summary, self.grad_summary])
                 train_ops = [summary_, self.train_op]
                 summary, _ = self.sess.run(train_ops, feed_dict)
         return summary
