@@ -96,8 +96,11 @@ def one_hot_encoder_v3(state, coord, vision_radius=19, reverse=False, flatten=Tr
 
     # Find goal
     gloc = np.where(oh_state[:, :, 4] == 1)
-    gloc = (gloc[0][0], gloc[1][0])
-    g_state[:,:,0] += (oh_state[:,:,4]==1).astype(np.int32)
+    try:
+        gloc = (gloc[0][0], gloc[1][0])
+        g_state[:,:,0] += (oh_state[:,:,4]==1).astype(np.int32)
+    except IndexError:
+        pass
 
     if flatten:
         oh_state = np.reshape(oh_state, (-1,))
