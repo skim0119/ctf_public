@@ -88,11 +88,11 @@ class Worker():
             global_length.append(l)
             global_succeed.append(s)
             if episode % save_stat_frequency == 0 and episode != 0:
-                value_dict = {'Records/mean_reward': Worker.global_rewards(),
-                              'Records/mean_length': Worker.global_length(),
-                              'Records/mean_succeed': Worker.global_succeed(),
-                              'Records/mean_episode_reward': Worker.global_ep_rewards()}
-                self.agent.record(value_dict, last_none_summary, episode)
+                value_dict = {'Records/mean_reward': global_rewards(),
+                              'Records/mean_length': global_length(),
+                              'Records/mean_succeed': global_succeed(),
+                              'Records/mean_episode_reward': global_ep_rewards()}
+                self.agent.record(value_dict, episode, last_none_summary)
 
             # Save Network
             if episode % save_network_frequency == 0 and episode != 0:

@@ -70,7 +70,7 @@ class Agent():
         self.saver.save(self.sess, save_path=path, global_step=global_step)
 
     def set_new_goal(self):
-        self.goals = np.random.randint(5,size=ctf_params['num_agent'])
+        self.goals = np.random.randint(5,size=self.ctf_params['num_agent'])
 
     def get_actions(self, states, env_goals):
         actions, values = [], []
@@ -101,8 +101,9 @@ class Agent():
         summary = tf.Summary()
         for name, value in value_dict.items():
             summary.value.add(tag=name, simple_value=value)
-        self.writer.add_summary(summary, episode)
+        self.writer.add_summary(summary, global_step=episode)
         if episode_summary is not None:
-            self.writer.add_summary(extra_summary, episode)
+            for _summary in episode_summary:
+                self.writer.add_summary(_summary, global_step=episode)
         self.writer.flush()
 
