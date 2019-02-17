@@ -60,7 +60,7 @@ def one_hot_encoder_v3(state, coord, vision_radius=19, reverse=False, flatten=Tr
     vision_lx = 2 * vision_radius + 1
     vision_ly = 2 * vision_radius + 1
     oh_state = np.zeros((vision_lx, vision_ly, 6), np.float)
-    g_state = np.zeros((vision_lx, vision_ly), np.float)
+    g_state = np.zeros((vision_lx, vision_ly, 1), np.float)
 
     map_channel = MAP_CHANNEL
     if reverse:
@@ -97,11 +97,11 @@ def one_hot_encoder_v3(state, coord, vision_radius=19, reverse=False, flatten=Tr
     # Find goal
     gloc = np.where(oh_state[:, :, 4] == 1)
     gloc = (gloc[0][0], gloc[1][0])
-    g_state += (oh_state[:,:,4]==1).astype(np.int32)
+    g_state[:,:,0] += (oh_state[:,:,4]==1).astype(np.int32)
 
     if flatten:
-        oh_state = np.flatten(oh_state, (-1,))
-        g_state = np.flatten(g_state, (-1,))
+        oh_state = np.reshape(oh_state, (-1,))
+        g_state = np.reshape(g_state, (-1,))
     return oh_state, g_state
 
 

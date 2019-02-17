@@ -6,6 +6,22 @@ import gym_cap
 import gym_cap.envs.const as CONST
 
 from utility.utils import store_args
+from utility.preprocessor import one_hot_encoder_v3 as state_encoder
+
+NUM_CHANNEL = 6
+VISION_RANGE = 19
+VISION_DX = 2 * VISION_RANGE + 1 
+VISION_DY = 2 * VISION_RANGE + 1 
+CTF_DEFAULT_PARAMS = {
+    'num_channel': NUM_CHANNEL,
+    'vision_range': VISION_RANGE,
+    'vision_dx': 2 * VISION_RANGE + 1,
+    'vision_dy': 2 * VISION_RANGE + 1,
+    'input_shape': [None, VISION_DX*VISION_DY*NUM_CHANNEL], 
+    'goal_shape': [None, VISION_DX*VISION_DY],
+    'action_size': 5,
+    'num_agent': CONST.NUM_BLUE
+}
 
 
 class CtF_Environment:
@@ -26,18 +42,27 @@ class CtF_Environment:
         self.frame = 0
 
     # Get state
-    def get_state(self):
-        return self.env._env
+    def get_states_and_goals(self):
+        states, goals = [], []
+        for vehicle in self.env.get_team_blue:
+            coord = vehicle.get_loc()
+            state, goal = state_encoder(state=self.env._env,
+                                        coord=coord,
+                                        vision_radius=VISION_RANGE, 
+                                        normalize_channel=False)
+            states.append(state)
+            goals.append(goal)
+        return np.stack(states), np.stack(goals)
 
     # Reset simulation
     def reset(self):
         self.env.reset()
         self.frame = 0
-        return self.get_state()
+        return self.get_states_and_goals()
 
     # Execute low-level action
-    def step(self, action):
-        s, _, done, _ = self.env.step(action)
+    def step(self, actions):
+        s, _, done, _ = self.env.step(actions)
         self.frame += 1
 
         reward = 0
@@ -52,7 +77,12 @@ class CtF_Environment:
         elif done:
             reward = -1
 
-        return self.get_state(), reward, done
+        states, goals = self.get_states_and_goals()
+
+        return states, actions, reward, done, goals
 
     def win_state(self):
         return self.env.blue_win
+
+    def life_status(self):
+        return [agent.isAlive for agent in self.env.get_team_blue]
