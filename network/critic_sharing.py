@@ -17,7 +17,7 @@ from utility.utils import retrace, retrace_prod
 
 
 # implementation for decentralized action and centralized critic
-class Population():
+class Critic_sharing():
     def __init__(self,
                  in_size,
                  action_size,
