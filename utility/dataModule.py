@@ -1,18 +1,18 @@
 import numpy as np
 import gym_cap.envs.const as CONST
 
-UNKNOWN = CONST.UNKNOWN          # -1
+UNKNOWN = CONST.UNKNOWN            # -1
 TEAM1_BG = CONST.TEAM1_BACKGROUND  # 0
 TEAM2_BG = CONST.TEAM2_BACKGROUND  # 1
-TEAM1_AG = CONST.TEAM1_UGV        # 2
+TEAM1_AG = CONST.TEAM1_UGV         # 2
 TEAM1_UAV = CONST.TEAM1_UAV        # 3
-TEAM2_AG = CONST.TEAM2_UGV        # 4
+TEAM2_AG = CONST.TEAM2_UGV         # 4
 TEAM2_UAV = CONST.TEAM2_UAV        # 5
-TEAM1_FL = CONST.TEAM1_FLAG       # 6
-TEAM2_FL = CONST.TEAM2_FLAG       # 7
-OBSTACLE = CONST.OBSTACLE         # 8
-DEAD = CONST.DEAD             # 9
-SELECTED = CONST.SELECTED         # 10
+TEAM1_FL = CONST.TEAM1_FLAG        # 6
+TEAM2_FL = CONST.TEAM2_FLAG        # 7
+OBSTACLE = CONST.OBSTACLE          # 8
+DEAD = CONST.DEAD                  # 9
+SELECTED = CONST.SELECTED          # 10
 COMPLETED = CONST.COMPLETED        # 11
 
 
@@ -20,10 +20,26 @@ class fake_agent:
     def __init__(self, x, y):
         self.x = x
         self.y = y
+
     def get_loc(self):
         return (self.x, self.y)
 
-def one_hot_encoder(state, agents=None, vision_radius=9, reverse=False, flatten=False, locs=None):
+
+def state_processor(state, agents=None, vision_radius=19, reverse=False):
+    """ pre_processor
+
+    Return encoded state, position, and goal position
+    """
+    flag_id = TEAM1_FL if reverse else TEAM2_FL
+    flag_loc = zip(*np.where(state == flag_id))[0]  # Single Flag
+    oh_state = one_hot_encoder(state, agents, vision_radius, reverse, flatten=True)
+    agents_loc = [agent.get_loc() for agent in agents]
+
+    return oh_state, agents_loc, flag_loc
+
+
+def one_hot_encoder(state, agents=None, vision_radius=9, reverse=False,
+                    flatten=False, locs=None):
     """Encoding pipeline for CtF state to one-hot representation
 
     6-channel one-hot representation of state.
@@ -41,7 +57,7 @@ def one_hot_encoder(state, agents=None, vision_radius=9, reverse=False, flatten=
     """
     if agents is None:
         assert locs is not None
-        agents = [fake_agent(x,y) for x,y in locs]
+        agents = [fake_agent(x, y) for x, y in locs]
 
     vision_lx = 2 * vision_radius + 1
     vision_ly = 2 * vision_radius + 1
