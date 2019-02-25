@@ -31,7 +31,7 @@ class Critic_sharing():
                  entropy_beta=0.001,
                  sess=None,
                  global_network=None,
-                 num_policy_pool=8,
+                 num_policy_pool=4,
                  allow_same_policy=False,
                  ):
         """ Initialize AC network and required parameters
@@ -95,18 +95,17 @@ class Critic_sharing():
         state_input = tf.placeholder(shape=self.in_size, dtype=tf.float32, name='ac_state_hold' + str(policy_id))
 
         with tf.variable_scope(scope):
-            net = layers.conv2d(state_input, 32, [3, 3], activation_fn=tf.nn.relu,
+            net = layers.conv2d(state_input, 16, [3, 3], activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
                                 padding='SAME')
             net = layers.max_pool2d(net, [2, 2])
-            net = layers.conv2d(net, 64, [2, 2], activation_fn=tf.nn.relu,
+            net = layers.conv2d(net, 32, [2, 2], activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
                                 padding='SAME')
             net = layers.flatten(net)
 
-            net = layers.fully_connected(net, 128)
             net = layers.fully_connected(net, self.action_size,
                                          activation_fn=tf.nn.softmax)
 
@@ -121,19 +120,18 @@ class Critic_sharing():
         state_input = tf.placeholder(shape=self.in_size, dtype=tf.float32, name='cr_state_hold' + str(critic_id))
 
         with tf.variable_scope(scope):
-            net = layers.conv2d(state_input, 32, [3, 3],
+            net = layers.conv2d(state_input, 16, [3, 3],
                                 activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
                                 padding='SAME')
             net = layers.max_pool2d(net, [2, 2])
-            net = layers.conv2d(net, 64, [2, 2],
+            net = layers.conv2d(net, 32, [2, 2],
                                 activation_fn=tf.nn.relu,
                                 weights_initializer=layers.xavier_initializer_conv2d(),
                                 biases_initializer=tf.zeros_initializer(),
                                 padding='SAME')
             net = layers.flatten(net)
-            net = layers.fully_connected(net, 64)
             net = layers.fully_connected(net, 1,
                                          activation_fn=None)
             net = tf.reshape(net, (-1,))
@@ -204,6 +202,8 @@ class Critic_sharing():
         a_loss, c_loss = [], []
         for idx, policy_id in enumerate(self.policy_index):
             s, a, adv, td, beta = states[idx], actions[idx], advs[idx], td_targets[idx], beta_policies[idx]
+            if s is None:
+                continue
             # Compute retrace weight
             feed_dict = {self.global_network.state_inputs_[policy_id]: np.stack(s)}
             soft_prob = self.sess.run(self.global_network.actors[policy_id], feed_dict)

@@ -7,8 +7,8 @@ from gym.utils import seeding
 import numpy as np
 
 from .agent import *
-from .create_map import CreateMap
 from .const import *
+from .create_map import CreateMap
 
 """
 Requires that all units initially exist in home zone.
@@ -32,6 +32,12 @@ class CapEnv(gym.Env):
         self    : object
             CapEnv object
         """
+        self.num_blue_ugv = NUM_BLUE
+        self.num_blue_uav = NUM_UAV
+        self.num_red_ugv = NUM_RED
+        self.num_red_uav = NUM_UAV
+        self.num_grey = NUM_GRAY
+
         self.seed()
         self.reset(map_size, mode=mode)
         self.viewer = None
@@ -39,8 +45,7 @@ class CapEnv(gym.Env):
             self.interaction = self._interaction_stoch
         else: self.interaction = self._interaction_determ
 
-    def reset(self, map_size=None, mode="random", policy_blue=None, policy_red=None,
-                 num_blue=NUM_BLUE, num_red=NUM_RED):
+    def reset(self, map_size=None, mode="random", policy_blue=None, policy_red=None):
         """
         Resets the game
 
@@ -49,7 +54,8 @@ class CapEnv(gym.Env):
         :return: void
 
         """
-        map_obj=[num_blue, NUM_UAV, num_red, NUM_UAV, NUM_GRAY]
+
+        map_obj = [self.num_blue_ugv, self.num_blue_uav, self.num_red_ugv, self.num_red_uav, self.num_grey]
         if map_size is None:
             self._env, self.team_home = CreateMap.gen_map('map', dim=self.map_size[0], rand_zones=STOCH_ZONES, np_random=self.np_random, map_obj=map_obj)
         else:
@@ -71,7 +77,7 @@ class CapEnv(gym.Env):
 
         self.mode = mode
 
-        if num_red== 0:
+        if NUM_RED == 0:
             self.mode = "sandbox"
 
         self.blue_win = False

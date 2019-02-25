@@ -18,31 +18,33 @@ class UACER:
     @store_args
     def __init__(self, in_size, gps_size, action_size, scope,
                  lr_actor=1e-4, lr_critic=1e-4, grad_clip_norm=0,
-                 entropy_beta=0.001, sess=None, global_network=None,
-                 trainable=True):
+                 entropy_beta=0.001, retrace_lambda=0.202,
+                 sess=None, global_network=None, set_global=False):
         """ Initialize AC network and required parameters """
 
         with tf.variable_scope(scope):
-            # Optimizer
-            self.actor_optimizer = tf.train.AdamOptimizer(self.lr_actor)
-            self.critic_optimizer = tf.train.AdamOptimizer(self.lr_critic)
+            # Build actor and critic network weights.
+            with tf.name_scope('state'):
+                self.local_state_ = tf.placeholder(shape=in_size, dtype=tf.float32, name='local_state')
+                self.gps_state_ = tf.placeholder(shape=gps_size, dtype=tf.float32, name='gps_state')
+                self.goal_state_ = tf.placeholder(shape=gps_size, dtype=tf.float32, name='gps_state')
 
-            # global Network
-            # Build actor and critic network weights. (global network does not need training sequence)
-            self.local_state_ = tf.placeholder(shape=in_size, dtype=tf.float32, name='local_state')
-            self.gps_state_ = tf.placeholder(shape=gps_size, dtype=tf.int32, name='gps_state')
-            self.goal_state_ = tf.placeholder(shape=gps_size, dtype=tf.int32, name='gps_state')
-
-            # get the parameters of actor and critic networks
             self.actor, self.critic, self.a_vars, self.c_vars = self.build_network(self.local_state_, self.gps_state_, self.goal_state_)
 
-            # Local Network
-            if trainable:
-                self.action_ = tf.placeholder(shape=[None], dtype=tf.int32, name='action_holder')
-                self.td_target_ = tf.placeholder(shape=[None], dtype=tf.float32, name='td_target_holder')
-                self.adv_ = tf.placeholder(shape=[None], dtype=tf.float32, name='adv_holder')
-                self.retrace_ = tf.placeholder(shape=[None], dtype=tf.float32, name='retrace_holder')
-                self.retrace_prod_ = tf.placeholder(shape=[None], dtype=tf.float32, name='retrace_prod_holder')
+            if set_global:
+                # Global Network
+                # Optimizer
+                self.actor_optimizer = tf.train.AdamOptimizer(self.lr_actor)
+                self.critic_optimizer = tf.train.AdamOptimizer(self.lr_critic)
+            else:
+                # Local Network
+                # Gradient and Pipeline
+                with tf.name_scope('backprop_pipeline'):
+                    self.action_ = tf.placeholder(shape=[None], dtype=tf.int32, name='action_holder')
+                    self.td_target_ = tf.placeholder(shape=[None], dtype=tf.float32, name='td_target_holder')
+                    self.adv_ = tf.placeholder(shape=[None], dtype=tf.float32, name='adv_holder')
+                    self.actor_correction_ = tf.placeholder(shape=[None], dtype=tf.float32, name='retrace_holder')
+                    self.critic_correction_ = tf.placeholder(shape=[None], dtype=tf.float32, name='retrace_prod_holder')
 
                 self.actor_loss, self.critic_loss, self.entropy = self.build_loss()
                 self.a_grads, self.c_grads = self.build_gradient()
@@ -51,9 +53,11 @@ class UACER:
     def build_network(self, input_, gps_, goal_):
         with tf.variable_scope('actor'):
             state_array = Deep_layer.conv2d_pool(input_layer=input_,
-                                                 channels=[32, 64],
-                                                 kernels=[3, 2],
-                                                 pools=[2, 1],
+                                                 channels=[32, 64, 64],
+                                                 kernels=[5, 3, 2],
+                                                 pools=[2, 2, 1],
+                                                 strides=[2, 2, 1],
+                                                 padding='VALID',
                                                  flatten=True)
             gps_array = Deep_layer.fc(input_layer=gps_,
                                       hidden_layers=[64, 64, 64],
@@ -67,7 +71,7 @@ class UACER:
 
             actor = layers.fully_connected(net, self.action_size,
                                            activation_fn=tf.nn.softmax,
-                                           name='actor')
+                                           scope='actor')
 
         with tf.variable_scope('critic'):
             critic = layers.fully_connected(net, 1,
@@ -85,13 +89,16 @@ class UACER:
             entropy = -tf.reduce_mean(self.actor * tf.log(self.actor), name='entropy')
             action_OH = tf.one_hot(self.action_, self.action_size)
             pi_t = tf.reduce_sum(self.actor * action_OH, 1)  # policy for corresponding state and action
-            exp_v = tf.log(pi_t) * self.adv_ * self.retrace_ + self.entropy_beta * self.entropy
+
+            actor_correction = self.retrace_lambda * tf.minimum(1.0, self.actor_correction_)
+            exp_v = tf.log(pi_t) * self.adv_ * actor_correction + self.entropy_beta * entropy
             actor_loss = -tf.reduce_mean(exp_v, name='actor_loss')
 
         # Critic (value) Loss
         with tf.name_scope('critic_train'):
             td_error = self.td_target_ - self.critic
-            critic_loss = tf.reduce_mean(tf.square(td_error * self.retrace_prod_), name='critic_loss')
+            critic_loss = tf.reduce_mean(tf.square(td_error), name='critic_loss')
+            #critic_loss = tf.reduce_mean(tf.square(td_error * self.critic_correction_), name='critic_loss')
 
         return actor_loss, critic_loss, entropy
 
@@ -109,6 +116,8 @@ class UACER:
 
     def build_pipeline(self):
         # Sync with Global Network
+        actor_optimizer = self.global_network.actor_optimizer
+        critic_optimizer = self.global_network.critic_optimizer
         with tf.name_scope('sync'):
             # Pull global weights to local weights
             with tf.name_scope('pull'):
@@ -117,25 +126,40 @@ class UACER:
 
             # Push local weights to global weights
             with tf.name_scope('push'):
-                update_a = self.actor_optimizer.apply_gradients(zip(self.a_grads, self.global_network.a_vars))
-                update_c = self.critic_optimizer.apply_gradients(zip(self.c_grads, self.global_network.c_vars))
+                update_a = actor_optimizer.apply_gradients(zip(self.a_grads, self.global_network.a_vars))
+                update_c = critic_optimizer.apply_gradients(zip(self.c_grads, self.global_network.c_vars))
         return pull_a_vars, pull_c_vars, update_a, update_c
 
     # Update global network with local gradients
-    def update_global(self, state, gps, goal,
-                      action, adv, td_target,
-                      retrace, retrace_prod):
+    def update_global(self, state, gps_state, goal,
+                      action, adv, td_target, beta_policy):
+
+        # Retrace
+        _, soft_prob = self.global_network.get_action(state, gps_state, goal) 
+        target_policy = np.array([p[act] for p, act in zip(soft_prob,action)])
+
+        importance_sampling = target_policy / np.array(beta_policy)
+        # retrace = []
+        # retrace_prod = []
+        # running_prob = 1.0
+        # for idx, (pi, beta) in enumerate(zip(target_policy, beta_policy)):
+        #     ratio = self.retrace_lambda * min(1.0, pi / beta)
+        #    running_prob *= ratio
+        #     retrace.append(ratio)
+        #    retrace_prod.append(running_prob)
+        # retrace = np.array(retrace)
+        #retrace_prod = np.array(retrace_prod)
+
         # update Sequence
         feed_dict = {self.local_state_: np.stack(state),
-                     self.gps_state_: np.stack(gps),
+                     self.gps_state_: np.stack(gps_state),
                      self.goal_state_: np.stack(goal),
                      self.action_: action,
                      self.adv_: adv,
                      self.td_target_: td_target,
-                     self.retrace_: retrace,
-                     self.retrace_prod_: retrace_prod}
+                     self.actor_correction_: importance_sampling}
 
-        ops = tf.group(self.actor_loss, self.critic_loss, self.entropy, self.update_a, self.update_c)
+        ops = [self.actor_loss, self.critic_loss, self.entropy, self.update_a, self.update_c]
         actor_loss, critic_loss, entropy, _, __ = self.sess.run(ops, feed_dict)
         return actor_loss, critic_loss, entropy
 
@@ -143,8 +167,21 @@ class UACER:
         self.sess.run([self.pull_a_vars, self.pull_c_vars])
 
     # Forward Propagation
-    def get_ac(self, s):
-        a_probs, critic = self.sess.run([self.actor, self.critic], {self.local_state_: s})
+    def get_action(self, state, gps, goal):
+        feed_dict = {self.local_state_: np.stack(state),
+                     self.gps_state_: np.stack(gps),
+                     self.goal_state_: np.stack(goal)}
+
+        a_probs = self.sess.run(self.actor, feed_dict)
         action = [np.random.choice(self.action_size, p=prob / sum(prob)) for prob in a_probs]
 
-        return action, a_probs, critic
+        return action, a_probs
+
+    def get_critic(self, state, gps, goal):
+        feed_dict = {self.local_state_: np.stack(state),
+                     self.gps_state_: np.stack(gps),
+                     self.goal_state_: np.stack(goal)}
+
+        critic = self.sess.run(self.critic, feed_dict)
+
+        return critic.tolist()

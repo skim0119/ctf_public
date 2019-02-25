@@ -24,7 +24,6 @@ Note:
 
 Todo:
     * Finish documenting the module
-    * Implement __main__ for quick debugging and checking
     * Move Experience_buffer from utils.py to this file.
         * Require to change all imports
 
@@ -39,6 +38,7 @@ class Trajectory:
     Equivalent to : list [[s0 a r s1]_0, [s0 a r s1]_1, [s0 a r s1]_2, ...]
     Shape of : [None, Depth]
     Each depth must be unstackable
+    Does not guarentee the order of push.
 
     Key Terms:
         depth : number of element in each point along the trajectory.
@@ -104,7 +104,7 @@ class Trajectory:
         # Find longest length sequence
         ret = tuple(np.array(b) for b in self.buffer)
         return ret
-    
+
     def section(self, length):
         self.buffer = [b[-length:] for b in self.buffer]
 
@@ -235,6 +235,70 @@ class Trajectory_buffer:
         else:
             raise NotImplementedError
         return ret
+
+
+class Replay_buffer:
+    """Replay_buffer
+    Replaybuffer use for storing tuples
+    Support returning and shuffling features
+    Store in list.
+    Order is not guranteed
+
+    Method:
+        __init__ (int, int)
+        __len__
+        add (list)
+        add_element (object)
+        flush
+        empty
+        sample (int, bool)
+        pop (int, bool)
+    """
+
+    def __init__(self, depth=4, buffer_size=5000):
+        self.buffer = []
+        self.buffer_size = buffer_size
+        self.depth = depth
+
+    def __len__(self):
+        return len(self.buffer)
+
+    def __call__(self):
+        return self.buffer
+
+    def __getitem__(self, index):
+        return self.buffer[index]
+
+    def append(self, sample):
+        self.buffer.append(sample)
+        if len(self.buffer) >= self.buffer_size:
+            self.buffer.pop(0)
+
+    def extend(self, samples):
+        if len(self.buffer) + len(samples) >= self.buffer_size:
+            random.shuffle(self.buffer)
+            self.buffer[0:(len(samples) + len(self.buffer)) - self.buffer_size] = []
+        self.buffer.extend(samples)
+
+    def flush(self):
+        # Return the remaining buffer and reset.
+        batch = self.buffer
+        self.buffer = []
+        return batch
+
+    def empty(self):
+        return len(self.buffer) == 0
+
+    def full(self):
+        return len(self.buffer) >= self.buffer_size
+
+    def pop(self, size, shuffle=False):
+        # Pop the first `size` items in order (queue).
+        if shuffle:
+            random.shuffle(self.buffer)
+        batch = self.buffer[:size]
+        self.buffer = self.buffer[size:]
+        return batch
 
 
 if __name__ == '__main__':

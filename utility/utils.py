@@ -253,24 +253,12 @@ class Experience_buffer:
     def empty(self):
         return len(self.buffer) == 0
 
-    def sample(self, size=2000, shuffle=False):
-        if shuffle:
-            random.shuffle(self.buffer)
-
-        if size > len(self.buffer):
-            return np.array(self.buffer)
-        else:
-            # return np.array([self.buffer.pop(random.randrange(len(self.buffer))) for _ in range(size)])
-            return np.reshape(np.array(random.sample(self.buffer, size)), [size, self.experience_shape])
-
     def pop(self, size, shuffle=False):
         # Pop the first `size` items in order (queue).
         if shuffle:
             random.shuffle(self.buffer)
-
-        i = min(len(self.buffer), size)
-        batch = np.reshape(np.array(self.buffer[:i]), [i, self.experience_shape])
-        self.buffer = self.buffer[i:]
+        batch = self.buffer[:size]
+        self.buffer = self.buffer[size:]
         return batch
 
 
