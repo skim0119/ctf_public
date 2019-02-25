@@ -34,7 +34,7 @@ class Deep_layer:
            activation=tf.nn.relu, reuse=False):
         net = input_layer
         for idx, node in enumerate(hidden_layers):
-            net = layers.fully_connected(net, node
+            net = layers.fully_connected(net, node,
                                          activate_fn=activation,
                                          reuse=reuse)
         return net
