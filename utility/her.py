@@ -18,6 +18,11 @@ class HER:
     """
 
     def __init__(self, depth=6, buffer_size=5000):
+        """__init__
+
+        :param depth: Number of element stored in each MDP tuple
+        :param buffer_size: Capacity of replay buffer
+        """
         self.replay_buffer = Replay_buffer(depth=depth, buffer_size=buffer_size)
         self.goal_buffer = Replay_buffer(depth=1, buffer_size=GOAL_BUFFER_SIZE)
 
@@ -30,30 +35,33 @@ class HER:
         #return -((s==g)==0)
 
     def action_replay(self, goal):
-        """ action replay
+        """action_replay
 
         Push new goal into replay buffer
         The final state of the trajectory is set to new sub-goal
+
+        :param goal:
         """
         self.goal_buffer.append(goal)
 
     def sample_goal(self, size=GOAL_REPLAY_SAMPLE):
+        """sample_goal
+
+        :param size: Number of goal sampled
+        """
         if len(self.goal_buffer) <= 0:
             return []
         goal_id = np.random.choice(len(self.goal_buffer), size)
         return [self.goal_buffer[id] for id in goal_id]
-        '''
-        remainder = max(0,size - len(self.replay_buffer))
-        if remainder is not 0:
-            return [global_goal]*size
-        goal_id = np.random.randint(len(self.replay_buffer), size=size)
-        return [self.replay_buffer[id][3] for id in goal_id]
-        '''
 
     def goal_replay(self, s_traj, a_traj, g):
-        """ Goal Replay 
-    
+        """goal_replay
+
         Take trajectory, action, and goal, return reward
+
+        :param s_traj:
+        :param a_traj:
+        :param g:
         """
         reward = []
         for s,a in zip(s_traj, a_traj):
@@ -64,14 +72,25 @@ class HER:
         return reward, len(reward)
 
     def store_transition(self, trajectory:list):
+        """store_transition
+
+        :param trajectory:
+        :type trajectory: list
+        """
         self.replay_buffer.append(trajectory)
 
     def sample_minibatch(self, size, shuffle=False):
+        """sample_minibatch
+
+        :param size:
+        :param shuffle:
+        """
         if size < len(self.replay_buffer):
             return self.replay_buffer.flush()
         else:
             return self.replay_buffer.pop(size, shuffle)
 
     def buffer_empty(self):
+        """buffer_empty"""
         return self.replay_buffer.empty()
 
