@@ -27,7 +27,7 @@ class UACER:
             with tf.name_scope('state'):
                 self.local_state_ = tf.placeholder(shape=in_size, dtype=tf.float32, name='local_state')
                 self.gps_state_ = tf.placeholder(shape=gps_size, dtype=tf.float32, name='gps_state')
-                self.goal_state_ = tf.placeholder(shape=gps_size, dtype=tf.float32, name='gps_state')
+                self.goal_state_ = tf.placeholder(shape=gps_size, dtype=tf.float32, name='goal')
 
             self.actor, self.critic, self.a_vars, self.c_vars = self.build_network(self.local_state_, self.gps_state_, self.goal_state_)
 
