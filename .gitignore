@@ -22,6 +22,7 @@ model_archives
 *.swp
 test_*
 clips/*
+reference/
 
 .DS_Store
 __pycache__

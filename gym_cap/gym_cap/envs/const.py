@@ -1,3 +1,5 @@
+
+
 # TeamConst
 """ Defining the constants for agents and teams """
 RED = 10
@@ -19,7 +21,7 @@ RL_SUGGESTIONS = False
 
 STOCH_TRANSITIONS = False
 STOCH_ATTACK = False
-STOCH_ZONES = True 
+STOCH_ZONES = False
 
 # MapConst
 """ Defining the constants for map and environment """

@@ -1,4 +1,5 @@
 import numpy as np
+import collections
 import gym_cap.envs.const as CONST
 
 UNKNOWN = CONST.UNKNOWN            # -1
@@ -23,6 +24,42 @@ class fake_agent:
 
     def get_loc(self):
         return (self.x, self.y)
+
+def state_processor_v2(state, agents=None, vision_radius=19, full_state=None, flatten=False, reverse=False, partial=True):
+    """ pre_processor
+
+    Return encoded state, position, and goal position
+    """
+    if not partial:
+        state = full_state
+    # Find Flag Location
+    flag_id = TEAM1_FL if reverse else TEAM2_FL
+    flag_locs = list(zip(*np.where(full_state == flag_id)))  
+    if len(flag_locs) == 0:
+        flag_loc = (-1,-1)
+    else:
+        flag_loc = flag_locs[0]
+
+    # One-hot encode state
+    oh_state = one_hot_encoder(state, agents, vision_radius, reverse, flatten=flatten)
+
+    # gps state
+    agents_loc = [agent.get_loc() for agent in agents]
+
+    # Count number of enemy and allies
+    items = collections.Counter(full_state.flatten())
+    num_team1 = items[TEAM1_AG]
+    num_team2 = items[TEAM2_AG]
+
+    # Concatenate global status
+    shared_status = np.concatenate([list(flag_loc), [num_team1], [num_team2]])
+
+    indv_status = []
+    for loc in agents_loc:
+        status = np.concatenate([list(loc), [num_team1], [num_team2]])
+        indv_status.append(status)
+
+    return oh_state, indv_status, shared_status
 
 
 def state_processor(state, agents=None, vision_radius=19, full_state=None, flatten=True, reverse=False, partial=True):

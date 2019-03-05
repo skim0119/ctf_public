@@ -292,10 +292,13 @@ class Replay_buffer:
     def full(self):
         return len(self.buffer) >= self.buffer_size
 
+    def shuffle(self):
+        random.shuffle(self.buffer)
+
     def pop(self, size, shuffle=False):
         # Pop the first `size` items in order (queue).
         if shuffle:
-            random.shuffle(self.buffer)
+            self.shuffle()
         batch = self.buffer[:size]
         self.buffer = self.buffer[size:]
         return batch

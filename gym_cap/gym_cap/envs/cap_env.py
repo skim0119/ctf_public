@@ -1,5 +1,6 @@
 import random
 import sys
+from collections import defaultdict
 
 import gym
 from gym import spaces
@@ -43,7 +44,11 @@ class CapEnv(gym.Env):
         self.viewer = None
         if STOCH_ATTACK:
             self.interaction = self._interaction_stoch
-        else: self.interaction = self._interaction_determ
+        else:
+            self.interaction = self._interaction_determ
+
+        self.sparse_reward = False
+        self.info = defaultdict(list)
 
     def reset(self, map_size=None, mode="random", policy_blue=None, policy_red=None):
         """
@@ -66,7 +71,7 @@ class CapEnv(gym.Env):
         if policy_blue is not None: self.policy_blue = policy_blue
         if policy_red is not None: self.policy_red = policy_red
 
-        self.action_space = spaces.Discrete(len(self.ACTION) ** (NUM_BLUE + NUM_UAV))
+        self.action_space = spaces.Discrete(len(self.ACTION) ** (self.num_blue_ugv + NUM_UAV))
 
         self.blue_win = False
         self.red_win = False
@@ -77,7 +82,7 @@ class CapEnv(gym.Env):
 
         self.mode = mode
 
-        if NUM_RED == 0:
+        if self.num_red_ugv == 0:
             self.mode = "sandbox"
 
         self.blue_win = False
@@ -85,6 +90,9 @@ class CapEnv(gym.Env):
 
         # Necessary for human mode
         self.first = True
+
+        # Reset information
+        self.info = defaultdict(list)
 
         return self.observation_space_blue
 
@@ -116,7 +124,7 @@ class CapEnv(gym.Env):
 
         return team_blue, team_red
 
-    def create_reward(self):
+    def create_reward(self, sparse=False):
         """
         Range (-100, 100)
 
@@ -125,13 +133,15 @@ class CapEnv(gym.Env):
         self    : object
             CapEnv object
         """
-        reward = 0
 
         if self.blue_win:
             return 100
-        if self.red_win:
+        elif self.red_win:
             return -100
+        if sparse:
+            return 0
 
+        reward = 0
         # Dead enemy team gives .5/total units for each dead unit
         for i in range(len(self.team_red)):
             if not self.team_red[i].isAlive:
@@ -288,7 +298,6 @@ class CapEnv(gym.Env):
                     elif entity.team == TEAM2_BACKGROUND and self._env[locx][locy] == TEAM2_UGV:
                         n_friends += 1
         if flag and self.np_random.rand() > n_friends/(n_friends + n_enemies):
-
             entity.isAlive = False
             self._env[loc] = DEAD
 
@@ -320,7 +329,8 @@ class CapEnv(gym.Env):
             float containing the reward for the given action
             isDone  : bool
             decides if the game is over
-            info    :
+            info    : Dictionary
+            provide rich information on game progress
         """
 
         move_list = []
@@ -339,16 +349,16 @@ class CapEnv(gym.Env):
                 print("No valid policy for blue team and no actions provided")
                 exit()
         elif type(entities_action) is int:
-            if entities_action >= len(self.ACTION) ** (NUM_BLUE + NUM_UAV):
+            if entities_action >= len(self.ACTION) ** (self.num_blue_ugv + NUM_UAV):
                 sys.exit("ERROR: You entered too many moves. \
-                         There are " + str(NUM_BLUE + NUM_UAV) + " entities.")
-            while len(move_list) < (NUM_BLUE + NUM_UAV):
+                         There are " + str(self.num_blue_ugv + NUM_UAV) + " entities.")
+            while len(move_list) < (self.num_blue_ugv + NUM_UAV):
                 move_list_blue.append(entities_action % 5)
                 entities_action = int(entities_action / 5)
         else:
-            if len(entities_action) > NUM_BLUE + NUM_UAV:
+            if len(entities_action) > self.num_blue_ugv + NUM_UAV:
                 sys.exit("ERROR: You entered too many moves. \
-                         There are " + str(NUM_BLUE + NUM_UAV) + " entities.")
+                         There are " + str(self.num_blue_ugv + NUM_UAV) + " entities.")
             move_list_blue = entities_action
 
 
@@ -397,16 +407,28 @@ class CapEnv(gym.Env):
         if not has_alive_entity:
             self.red_win = True
 
-        reward = self.create_reward()
+        reward = self.create_reward(sparse=self.sparse_reward)
 
         self.create_observation_space()
 
         self.state = np.copy(self._env)
 
         isDone = self.red_win or self.blue_win
-        info = {}
 
-        return self.state, reward, isDone, info
+        # Construct rich information
+        #   - Trajectory coordinate, interaction, status condition, action
+        blue_coord = [entity.get_loc() for entity in self.team_blue]
+        red_coord = [entity.get_loc() for entity in self.team_red]
+        blue_alive = [entity.isAlive for entity in self.team_blue]
+        red_alive = [entity.isAlive for entity in self.team_red]
+        self.info['blue_locs'].append(blue_coord)
+        self.info['red_locs'].append(red_coord)
+        self.info['blue_alive'].append(blue_alive)
+        self.info['red_alive'].append(red_alive)
+        self.info['blue_action'].append(move_list_blue)
+        self.info['red_action'].append(move_list_red)
+
+        return self.state, reward, isDone, self.info 
 
     def render(self, mode='human'):
         """
