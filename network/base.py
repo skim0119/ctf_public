@@ -34,10 +34,12 @@ class Deep_layer:
     def fc(input_layer, hidden_layers, dropout=1.0,
            activation=tf.nn.elu, reuse=False, scope=""):
         net = input_layer
+        init = Custom_initializers.variance_scaling()
         for idx, node in enumerate(hidden_layers):
             net = layers.fully_connected(net, int(node),
                                          activation_fn=activation,
                                          scope=f"dense_{idx}"+scope,
+                                         weights_initializer=init,
                                          reuse=reuse)
             if idx < len(hidden_layers)-1:
                 net = layers.dropout(net,dropout)
@@ -59,3 +61,7 @@ class Custom_initializers:
             out = np.random.lognormal(mean=mu, sigma=std, size=shape).astype(np.float32)
             return tf.constant(out)
         return _initializer
+
+    @staticmethod
+    def variance_scaling():
+        return tf.contrib.layers.variance_scaling_initializer(factor = 1.0, mode = "FAN_AVG", uniform = False)

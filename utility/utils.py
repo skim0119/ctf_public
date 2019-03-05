@@ -97,6 +97,19 @@ def discount_rewards(rewards, gamma, normalize=False, mask_array=None):
 
         return disc_r
 
+def q_retrace(reward, value_ext, gamma, is_weight):
+    retrace_weight = np.minimum(1.0, is_weight)
+    td_target = reward + gamma * value_ext[1:]
+    value = value_ext[:-1]
+    qret = value_ext[-1]
+    qrets = []
+    for i in range(len(is_weight)- 1, -1, -1):
+        qret = reward[i] + gamma * qret
+        qrets.append(qret)
+        qret = (retrace_weight[i] * (qret - td_target[i])) + value[i]
+    qrets.reverse()
+    return qrets
+
 
 def normalize(r):
     """ take 1D float numpy array and normalize it

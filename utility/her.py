@@ -3,10 +3,10 @@ import random
 
 from utility.buffer import Replay_buffer
 
-GOAL_BUFFER_SIZE = 10
+GOAL_BUFFER_SIZE = 5
 # goal-replay will augment the experience.
 # Adjust number depend on number of episode per train, number of agent, max episode, and buffer size#
-GOAL_REPLAY_SAMPLE = 3
+GOAL_REPLAY_SAMPLE = 5
 
 class HER:
     """HER
@@ -51,7 +51,10 @@ class HER:
         """
         if len(self.goal_buffer) <= 0:
             return []
-        goal_id = np.random.choice(len(self.goal_buffer), size)
+        if len(self.goal_buffer) <= size:
+            return self.goal_buffer.buffer[:]
+        goal_id = random.sample(range(GOAL_BUFFER_SIZE), size)
+        #goal_id = np.random.choice(len(self.goal_buffer), size)
         return [self.goal_buffer[id] for id in goal_id]
 
     def goal_replay(self, s_traj, a_traj, g):
@@ -69,6 +72,8 @@ class HER:
             reward.append(r)
             if r == 1:
                 break
+        if 1 not in reward:
+            reward[-1] = -1
         return reward, len(reward)
 
     def store_transition(self, trajectory:list):

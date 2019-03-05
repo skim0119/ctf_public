@@ -6,7 +6,7 @@ import random
 
 from utility.utils import store_args
 
-from network.base import Deep_layer
+from network.base import Deep_layer, Custom_initializers
 
 
 class UACER:
@@ -90,7 +90,8 @@ class UACER:
             action_OH = tf.one_hot(self.action_, self.action_size)
             pi_t = tf.reduce_sum(self.actor * action_OH, 1)  # policy for corresponding state and action
 
-            actor_correction = self.retrace_lambda * tf.minimum(1.0, self.actor_correction_)
+            #actor_correction = self.retrace_lambda * tf.minimum(1.0, self.actor_correction_)  # HP
+            actor_correction = self.actor_correction_
             exp_v = tf.log(pi_t) * self.adv_ * actor_correction + self.entropy_beta * entropy
             actor_loss = -tf.reduce_mean(exp_v, name='actor_loss')
 
@@ -132,23 +133,7 @@ class UACER:
 
     # Update global network with local gradients
     def update_global(self, state, gps_state, goal,
-                      action, adv, td_target, beta_policy):
-
-        # Retrace
-        _, soft_prob = self.global_network.get_action(state, gps_state, goal) 
-        target_policy = np.array([p[act] for p, act in zip(soft_prob,action)])
-
-        importance_sampling = target_policy / np.array(beta_policy)
-        # retrace = []
-        # retrace_prod = []
-        # running_prob = 1.0
-        # for idx, (pi, beta) in enumerate(zip(target_policy, beta_policy)):
-        #     ratio = self.retrace_lambda * min(1.0, pi / beta)
-        #    running_prob *= ratio
-        #     retrace.append(ratio)
-        #    retrace_prod.append(running_prob)
-        # retrace = np.array(retrace)
-        #retrace_prod = np.array(retrace_prod)
+                      action, adv, td_target, is_weight):
 
         # update Sequence
         feed_dict = {self.local_state_: np.stack(state),
@@ -157,7 +142,7 @@ class UACER:
                      self.action_: action,
                      self.adv_: adv,
                      self.td_target_: td_target,
-                     self.actor_correction_: importance_sampling}
+                     self.actor_correction_: is_weight}
 
         ops = [self.actor_loss, self.critic_loss, self.entropy, self.update_a, self.update_c]
         actor_loss, critic_loss, entropy, _, __ = self.sess.run(ops, feed_dict)
