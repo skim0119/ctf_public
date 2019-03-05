@@ -56,7 +56,7 @@ class HAC:
             # global Network
             # Build actor and critic network weights. (global network does not need training sequence)
             self.state_input_ = tf.placeholder(shape=local_state_shape, dtype=tf.float32, name='state')
-            self.gps_state_ = tf.placeholder(shape=shared_state_shape, dtype=tf.float32, name='gps_state')
+            self.gps_state_ = tf.placeholder(shape=[None,2], dtype=tf.float32, name='gps_state')
             self.goal_state_ = tf.placeholder(shape=shared_state_shape, dtype=tf.float32, name='goal_state')
 
             # get the parameters of actor and critic networks
@@ -183,9 +183,8 @@ class HAC:
         return pull_op
 
     def _build_push(self, grads, var, optimizer, tau=1.0):
-        if explicit_policy:
+        if self.explicit_policy:
             with tf.name_scope('push'):
-                grads = [grad for grad, var in grads if grad is not None]
                 update_op = optimizer.apply_gradients(zip(grads, var))
             return update_op
         else:
