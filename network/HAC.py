@@ -183,8 +183,9 @@ class HAC:
         return pull_op
 
     def _build_push(self, grads, var, optimizer, tau=1.0):
-        if self.explicit_policy:
+        if explicit_policy:
             with tf.name_scope('push'):
+                grads = [grad for grad, var in grads if grad is not None]
                 update_op = optimizer.apply_gradients(zip(grads, var))
             return update_op
         else:
