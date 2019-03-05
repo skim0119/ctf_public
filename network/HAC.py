@@ -71,40 +71,27 @@ class ActorCritic:
             self.goal_state_ = tf.placeholder(shape=shared_state_shape, dtype=tf.float32, name='goal_state')
 
             # get the parameters of actor and critic networks
-            self._build_policy_network(self.state_input)
+            if explicit_policy:
+                self.actor, self.critic, self.a_vars, self.c_vars = self._build_policy_network(self.state_input_, self.gps_state_, self.goal_state_)
 
-            self.a_vars = tf.get_collection(
-                tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/actor')
-            self.c_vars = tf.get_collection(
-                tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/critic')
-
-            # Local Network
-            if scope == 'global':
-                # Optimizer
-                self.critic_optimizer = tf.train.AdamOptimizer(
-                    self.lr_critic, name='Adam_critic')
+                self.critic_optimizer = tf.train.AdamOptimizer(self.lr_critic, name='Adam_critic')
                 self.actor_optimizer = tf.train.AdamOptimizer(self.lr_actor, name='Adam_actor')
-            else:
-                self.action_ = tf.placeholder(shape=[None], dtype=tf.int32, name='action_holder')
-                self.action_OH = tf.one_hot(self.action_, action_size)
-                self.td_target_ = tf.placeholder(
-                    shape=[None], dtype=tf.float32, name='td_target_holder')
-                self.advantage_ = tf.placeholder(shape=[None], dtype=tf.float32, name='adv_holder')
-#                 self.likelihood_ = tf.placeholder(shape[None], dtype=tf.float32, name='likelihood_holder')
-#                 self.likelihood_cumprod_ = tf.placeholder(shape[None], dtype=tf.float32, name='likelihood_cumprod_holder')
 
-                with tf.name_scope('train'), tf.device('/gpu:0'):
+                self.action_ = tf.placeholder(shape=[None], dtype=tf.int32, name='action_holder')
+                self.td_target_ = tf.placeholder(shape=[None], dtype=tf.float32, name='td_target_holder')
+                self.advantage_ = tf.placeholder(shape=[None], dtype=tf.float32, name='adv_holder')
+
+                with tf.name_scope('train'):
                     # Critic (value) Loss
                     td_error = self.td_target_ - self.critic
                     self.entropy = -tf.reduce_mean(self.actor * tf.log(self.actor), name='entropy')
-                    self.critic_loss = tf.reduce_mean(tf.square(td_error),  # * self.likelihood_cumprod_),
-                                                      name='critic_loss')
+                    self.critic_loss = tf.reduce_mean(tf.square(td_error), name='critic_loss')
 
                     # Actor Loss
-                    obj_func = tf.log(tf.reduce_sum(self.actor * self.action_OH, 1))
+                    action_OH = tf.one_hot(self.action_, action_size)
+                    obj_func = tf.log(tf.reduce_sum(self.actor * action_OH, 1))
                     exp_v = obj_func * self.advantage_
                     self.actor_loss = tf.reduce_mean(-exp_v, name='actor_loss') - entropy_beta * self.entropy
-
                     self.total_loss = critic_beta * self.critic_loss + self.actor_loss - entropy_beta * self.entropy
 
                 with tf.name_scope('local_grad'):
@@ -118,21 +105,36 @@ class ActorCritic:
 
                 # Sync with Global Network
                 with tf.name_scope('sync'):
-                    # Pull global weights to local weights
-                    with tf.name_scope('pull'):
-                        pull_a_vars_op = [local_var.assign(glob_var) for local_var, glob_var in zip(self.a_vars, global_network.a_vars)]
-                        pull_c_vars_op = [local_var.assign(glob_var) for local_var, glob_var in zip(self.c_vars, global_network.c_vars)]
-                        self.pull_op = tf.group(pull_a_vars_op, pull_c_vars_op)
+                    pull_a_vars_op = self._build_pull(self.a_vars, self.global_network.a_vars)
+                    pull_c_vars_op = self._build_pull(self.c_vars, self.global_network.c_vars)
+                    self.pull_op = tf.group(pull_a_vars_op, pull_c_vars_op)
 
-                    # Push local weights to global weights
-                    with tf.name_scope('push'):
-                        update_a_op = global_network.actor_optimizer.apply_gradients(zip(a_grads, global_network.a_vars))
-                        update_c_op = global_network.critic_optimizer.apply_gradients(zip(c_grads, global_network.c_vars))
-                        self.update_ops = tf.group(update_a_op, update_c_op)
+                    update_a_op = self._build_push(a_grads, self.global_network.a_vars, global_network.actor_optimizer)
+                    update_c_op = self._build_push(c_grads, self.global_network.c_vars, global_network.critic_optimizer)
+                    self.update_ops = tf.group(update_a_op, update_c_op)
+            else:
+                self.q, self.q_vars = self._build_q_network(self.state_input_, self.gps_state_, self.goal_state_)
+                self.predict = tf.argmax(self.q, axis=-1)
 
-    def _build_policy_network(self, input_net):
-        with tf.variable_scope('actor'):
-            net = Deep_layer.conv2d_pool(input_net, [32,64,64], [5,3,2], [2,2,2],
+                self.optimizer = tf.train.AdamOptimizer(self.lr_critic, name='Adam_critic')
+
+                self.action_ = tf.placeholder(shape=None, dtype=tf.int32)
+                self.q_next_ = tf.placeholder(shape=None, dtype=tf.float32)
+
+                action_OH = tf.one_hot(self.action_, self.action_size, dtype = tf.float32)
+                Q = tf.reduce_sum(tf.multiply(self.q, action_OH), axis = 1)
+                self.q_loss = tf.reduce_sum(tf.square(self.q_next_ - Q))
+
+                q_grads = tf.gradients(self.q_loss, self.q_vars)
+
+                # Sync with Global Network
+                with tf.name_scope('sync'):
+                    self.pull_op = self._build_pull(self.q_vars, self.global_network.q_vars)
+                    self.update_ops = self._build_push(q_grads, self.global_network.q_vars, global_network.optimizer, tau=0.1)
+
+    def _build_q_network(self, input_, gps_, goal_, reuse=False):
+        with tf.variable_scope('Q', reuse=reuse):
+            net = Deep_layer.conv2d_pool(input_, [32,64,64], [5,3,2], [2,2,2],
                                          padding='SAME', flatten=True)
             gps_array = Deep_layer.fc(input_layer=gps_,
                                       hidden_layers=[64, 64],
@@ -141,39 +143,88 @@ class ActorCritic:
                                        hidden_layers=[64, 64],
                                        dropout=1.0,
                                        reuse=True)
-
+            net = tf.concat([state_array, gps_array, goal_array], 1)
             net = layers.fully_connected(net, 128)
+            q = layers.fully_connected(net,
+                                       self.action_size,
+                                       weights_initializer=layers.xavier_initializer(),
+                                       biases_initializer=tf.zeros_initializer(),
+                                       activation_fn=None)
 
-            self.actor = layers.fully_connected(net,
-                                                self.action_size,
-                                                weights_initializer=layers.xavier_initializer(),
-                                                biases_initializer=tf.zeros_initializer(),
-                                                activation_fn=tf.nn.softmax)
+        q_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/Q')
 
+        return q, q_vars
+
+    def _build_policy_network(self, input_, gps_, goal_, reuse=False):
+        with tf.variable_scope('actor', reuse=reuse):
+            net = Deep_layer.conv2d_pool(input_, [32,64,64], [5,3,2], [2,2,2],
+                                         padding='SAME', flatten=True)
+            gps_array = Deep_layer.fc(input_layer=gps_,
+                                      hidden_layers=[64, 64],
+                                      dropout=1.0)
+            goal_array = Deep_layer.fc(input_layer=goal_,
+                                       hidden_layers=[64, 64],
+                                       dropout=1.0,
+                                       reuse=True)
+            net = tf.concat([state_array, gps_array, goal_array], 1)
+            net = layers.fully_connected(net, 128)
+            actor = layers.fully_connected(net,
+                                           self.action_size,
+                                           weights_initializer=layers.xavier_initializer(),
+                                           biases_initializer=tf.zeros_initializer(),
+                                           activation_fn=tf.nn.softmax)
         with tf.variable_scope('critic'):
-            self.critic = layers.fully_connected(net,
-                                                 1,
-                                                 weights_initializer=layers.xavier_initializer(),
-                                                 biases_initializer=tf.zeros_initializer(),
-                                                 activation_fn=None)
-            self.critic = tf.reshape(self.critic, [-1])
+            critic = layers.fully_connected(net,
+                                            1,
+                                            weights_initializer=layers.xavier_initializer(),
+                                            biases_initializer=tf.zeros_initializer(),
+                                            activation_fn=None)
+            critic = tf.reshape(self.critic, [-1])
+
+
+        a_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/actor')
+        c_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/critic')
+
+        return actor, critic, a_vars, c_vars
+
+    def _build_pull(self, local_vars, global_vars):
+        with tf.name_scope('pull'):
+            pull_op = [local_var.assign(glob_var) for local_var, glob_var in zip(local_vars, global_vars)]
+        return pull_op
+
+    def _build_push(self, grads, var, optimizer, tau=1.0):
+        with tf.name_scope('push'):
+            grads = [grad * tau for grad, var in grads if grad is not None]
+            update_op = optimizer.apply_gradients(zip(grads, var))
+        return update_op
 
     # Update global network with local gradients
-
     # Choose Action
     def run_network(self, feed_dict):
-        a_probs, critic = self.sess.run([self.actor, self.critic], feed_dict)
-        return [np.random.choice(self.action_size, p=prob/sum(prob)) for prob in a_probs], critic
+        if explicit_policy:
+            a_probs, critic = self.sess.run([self.actor, self.critic], feed_dict)
+            return [np.random.choice(self.action_size, p=prob/sum(prob)) for prob in a_probs], critic
+        else:
+            q, pred = self.sess.run([self.q, self.predict], feed_dict)
+            return pred, q
     
     def run_sample(self, feed_dict):
-        a_probs = self.sess.run(self.actor, feed_dict)
-        return a_probs
+        if explicit_policy:
+            a_probs = self.sess.run(self.actor, feed_dict)
+            return a_probs
+        else:
+            q = self.sess.run(self.q, feed_dict)
+            return q
 
     def update_global(self, feed_dict):
         self.sess.run(self.update_ops, feed_dict)
-        al, cl, etrpy = self.sess.run([self.actor_loss, self.critic_loss, self.entropy], feed_dict)
+        if explicit_policy:
+            al, cl, etrpy = self.sess.run([self.actor_loss, self.critic_loss, self.entropy], feed_dict)
+            return al, cl, etrpy
+        else:
+            ql = self.sess.run(self.q_loss, feed_dict)
+            return ql
 
-        return al, cl, etrpy
 
     def pull_global(self):
         self.sess.run(self.pull_op)
