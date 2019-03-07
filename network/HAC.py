@@ -56,7 +56,7 @@ class HAC:
             # global Network
             # Build actor and critic network weights. (global network does not need training sequence)
             self.state_input_ = tf.placeholder(shape=local_state_shape, dtype=tf.float32, name='state')
-            self.gps_state_ = tf.placeholder(shape=[None,2], dtype=tf.float32, name='gps_state')
+            self.gps_state_ = tf.placeholder(shape=shared_state_shape, dtype=tf.float32, name='gps_state')
             self.goal_state_ = tf.placeholder(shape=shared_state_shape, dtype=tf.float32, name='goal_state')
 
             # get the parameters of actor and critic networks
