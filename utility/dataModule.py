@@ -5,9 +5,9 @@ import gym_cap.envs.const as CONST
 UNKNOWN = CONST.UNKNOWN            # -1
 TEAM1_BG = CONST.TEAM1_BACKGROUND  # 0
 TEAM2_BG = CONST.TEAM2_BACKGROUND  # 1
-TEAM1_AG = CONST.TEAM1_UGV         # 2
+TEAM1_GV = CONST.TEAM1_UGV         # 2
 TEAM1_UAV = CONST.TEAM1_UAV        # 3
-TEAM2_AG = CONST.TEAM2_UGV         # 4
+TEAM2_GV = CONST.TEAM2_UGV         # 4
 TEAM2_UAV = CONST.TEAM2_UAV        # 5
 TEAM1_FL = CONST.TEAM1_FLAG        # 6
 TEAM2_FL = CONST.TEAM2_FLAG        # 7
@@ -16,6 +16,19 @@ DEAD = CONST.DEAD                  # 9
 SELECTED = CONST.SELECTED          # 10
 COMPLETED = CONST.COMPLETED        # 11
 
+SIX_MAP_CHANNEL = {UNKNOWN: 0, DEAD: 0,
+                   TEAM1_BG: 1, TEAM2_BG: 1,
+                   TEAM1_GV: 2, TEAM2_GV: 2,
+                   TEAM1_UAV: 3, TEAM2_UAV: 3,
+                   TEAM1_FL: 4, TEAM2_FL: 4,
+                   OBSTACLE: 5}
+SEVEN_MAP_CHANNEL = {UNKNOWN: 0, DEAD: 0,
+                     TEAM1_BG: 1, TEAM2_BG: 1,
+                     TEAM1_GV: 2,
+                     TEAM2_GV: 3,
+                     TEAM1_UAV: 4, TEAM2_UAV: 4,
+                     TEAM1_FL: 5, TEAM2_FL: 5,
+                     OBSTACLE: 6}
 
 class fake_agent:
     def __init__(self, x, y):
@@ -25,7 +38,35 @@ class fake_agent:
     def get_loc(self):
         return (self.x, self.y)
 
-def state_processor_v2(state, agents=None, vision_radius=19, full_state=None, flatten=False, reverse=False, partial=True):
+def meta_state_processor(full_state, game_info, map_size=20, flatten=False, reverse=False):
+    """meta_state_processor """
+    agent_locs = game_info['blue_locs']
+    enemy_locs = game_info['red_locs']
+    agent_alive = game_info['blue_alive']
+    enemy_alive = game_info['red_alive']
+
+    # Build Shared State
+    flag_loc = _find_coord(full_state, TEAM1_FL if reverse else TEAM2_FL)
+    num_agent = len(agent_alive)
+    num_alive_agent = sum(agent_alive)
+    num_alive_enemy = sum(enemy_alive)
+    shared_state = (*flag_loc, num_alive_agent, num_alive_enemy)
+
+    # Build Individual State
+    oh_state = np.zeros((num_agent, *full_state.shape, 8))
+    decomp_state = _decompose_full_state(full_state, reverse=reverse)
+    for agent_state in oh_state:
+        agent_state[:,:,:-1] = decomp_state
+    for idx, (loc, alive) in enumerate(zip(agent_locs, agent_alive)):
+        if not alive:
+            continue
+        oh_state[idx,loc[0],loc[1],-1] = 1
+
+    if flatten:
+        return np.reshape(oh_state, (num_agent, -1))
+    return oh_state
+
+def state_processor(state, agents=None, vision_radius=19, full_state=None, flatten=False, reverse=False, partial=True):
     """ pre_processor
 
     Return encoded state, position, and goal position
@@ -48,8 +89,8 @@ def state_processor_v2(state, agents=None, vision_radius=19, full_state=None, fl
 
     # Count number of enemy and allies
     items = collections.Counter(full_state.flatten())
-    num_team1 = items[TEAM1_AG]
-    num_team2 = items[TEAM2_AG]
+    num_team1 = items[TEAM1_GV]
+    num_team2 = items[TEAM2_GV]
 
     # Concatenate global status
     shared_status = np.concatenate([list(flag_loc), [num_team1], [num_team2]])
@@ -60,30 +101,6 @@ def state_processor_v2(state, agents=None, vision_radius=19, full_state=None, fl
         indv_status.append(status)
 
     return oh_state, indv_status, shared_status
-
-
-def state_processor(state, agents=None, vision_radius=19, full_state=None, flatten=True, reverse=False, partial=True):
-    """ pre_processor
-
-    Return encoded state, position, and goal position
-    """
-    if not partial:
-        state = full_state
-    # Find Flag Location
-    flag_id = TEAM1_FL if reverse else TEAM2_FL
-    flag_locs = list(zip(*np.where(full_state == flag_id)))  
-    if len(flag_locs) == 0:
-        flag_loc = (-1,-1)
-    else:
-        flag_loc = flag_locs[0]
-
-    # One-hot encode state
-    oh_state = one_hot_encoder(state, agents, vision_radius, reverse, flatten=flatten)
-
-    # gps state
-    agents_loc = [agent.get_loc() for agent in agents]
-
-    return oh_state, agents_loc, [flag_loc]*len(agents)
 
 
 def one_hot_encoder(state, agents=None, vision_radius=9, reverse=False,
@@ -112,23 +129,18 @@ def one_hot_encoder(state, agents=None, vision_radius=9, reverse=False,
     oh_state = np.zeros((len(agents), vision_lx, vision_ly, 6), np.float)
 
     # team 1 : (1), team 2 : (-1), map elements: (0)
-    map_channel = {UNKNOWN: 0, DEAD: 0,
-                   TEAM1_BG: 1, TEAM2_BG: 1,
-                   TEAM1_AG: 2, TEAM2_AG: 2,
-                   TEAM1_UAV: 3, TEAM2_UAV: 3,
-                   TEAM1_FL: 4, TEAM2_FL: 4,
-                   OBSTACLE: 5}
+    map_channel = SIX_MAP_CHANNEL
     if not reverse:
         map_color = {UNKNOWN: 1, DEAD: 0,
                      TEAM1_BG: 0, TEAM2_BG: 1,
-                     TEAM1_AG: 1, TEAM2_AG: -1,
+                     TEAM1_GV: 1, TEAM2_GV: -1,
                      TEAM1_UAV: 1, TEAM2_UAV: -1,
                      TEAM1_FL: 1, TEAM2_FL: -1,
                      OBSTACLE: 1}
     else:  # reverse color
         map_color = {UNKNOWN: 1, DEAD: 0,
                      TEAM1_BG: 1, TEAM2_BG: 0,
-                     TEAM1_AG: -1, TEAM2_AG: 1,
+                     TEAM1_GV: -1, TEAM2_GV: 1,
                      TEAM1_UAV: -1, TEAM2_UAV: 1,
                      TEAM1_FL: -1, TEAM2_FL: 1,
                      OBSTACLE: 1}
@@ -177,10 +189,10 @@ def one_hot_encoder_v2(state, agents, vision_radius=9, reverse=False, flatten=Fa
 
     # Map channel for each elements
     if not reverse:
-        order = [UNKNOWN, OBSTACLE, TEAM1_BG, TEAM2_BG, TEAM1_AG, TEAM2_AG,
+        order = [UNKNOWN, OBSTACLE, TEAM1_BG, TEAM2_BG, TEAM1_GV, TEAM2_GV,
                  TEAM1_UAV, TEAM2_UAV, TEAM1_FL, TEAM2_FL, DEAD]
     else:
-        order = [UNKNOWN, OBSTACLE, TEAM2_BG, TEAM1_BG, TEAM2_AG, TEAM1_AG,
+        order = [UNKNOWN, OBSTACLE, TEAM2_BG, TEAM1_BG, TEAM2_GV, TEAM1_GV,
                  TEAM2_UAV, TEAM1_UAV, TEAM2_FL, TEAM1_FL, DEAD]
     map_channel = dict(zip(order, range(num_channel)))
 
@@ -209,6 +221,54 @@ def one_hot_encoder_v2(state, agents, vision_radius=9, reverse=False, flatten=Fa
         return np.reshape(oh_state, (len(agents), -1))
     else:
         return oh_state
+
+def _find_coord(grid, element_id, single_value=False):
+    """_find_coord
+
+    Given the 2d grid, return possible coordinates
+    If none, return (-1,-1)
+
+    :param grid:
+        2D Grid
+    :param element_id:
+        Element number to find
+    """
+    # Find Location
+    locs = list(zip(*np.where(full_state == element_id)))
+    if len(locs) == 0:
+        return (-1,-1)
+    if single_value:
+        return locs[0]
+    else:
+        return locs
+
+def _decompose_full_state(full_state, reverse=False):
+    """_decompose_full_state"""
+    oh_state = np.zeros((*(full_state.shape) , 6), dtype=np.float)
+
+    # team 1 : (1), team 2 : (-1), map elements: (0)
+    map_channel = SEVEN_MAP_CHANNEL
+    map_color = {UNKNOWN: 1, DEAD: 0,
+                 TEAM1_BG: 0, TEAM2_BG: 1,
+                 TEAM1_GV: 1,
+                 TEAM2_GV: 1,
+                 TEAM1_UAV: 1, TEAM2_UAV: -1,
+                 TEAM1_FL: 1, TEAM2_FL: -1,
+                 OBSTACLE: 1}
+    if reverse:
+        map_color.update({TEAM1_BG: 1, TEAM2_BG: 0,
+                          TEAM1_GV: -1, TEAM2_GV: 1,
+                          TEAM1_UAV: -1, TEAM2_UAV: 1,
+                          TEAM1_FL: -1, TEAM2_FL: 1})
+
+    # Full matrix operation
+    for channel, val in map_color.items():
+        if val == 1:
+            oh_state[:, :, map_channel[channel]] += (full_state == channel).astype(np.int32)
+        elif val == -1:
+            oh_state[:, :, map_channel[channel]] -= (full_state == channel).astype(np.int32)
+
+    return oh_state
 
 
 def debug():

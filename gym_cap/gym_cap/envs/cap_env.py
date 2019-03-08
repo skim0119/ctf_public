@@ -386,6 +386,8 @@ class CapEnv(gym.Env):
             self.interaction(entity)
 
         # Check win and lose conditions
+        red_flag_captured = False
+        blue_flag_captured = False
         has_alive_entity = False
         for i in self.team_red:
             if i.isAlive and not i.air:
@@ -393,6 +395,7 @@ class CapEnv(gym.Env):
                 locx, locy = i.get_loc()
                 if self.team_home[locx][locy] == TEAM1_FLAG:
                     self.red_win = True
+                    blue_flag_captured = True
         # TODO Change last condition for multi agent model
         if not has_alive_entity and self.mode != "sandbox" and self.mode != "human_blue":
             self.blue_win = True
@@ -404,6 +407,7 @@ class CapEnv(gym.Env):
                 locx, locy = i.get_loc()
                 if self.team_home[locx][locy] == TEAM2_FLAG:
                     self.blue_win = True
+                    red_flag_captured = True
         if not has_alive_entity:
             self.red_win = True
 
@@ -427,6 +431,8 @@ class CapEnv(gym.Env):
         self.info['red_alive'].append(red_alive)
         self.info['blue_action'].append(move_list_blue)
         self.info['red_action'].append(move_list_red)
+        self.info['blue_flag_caught'].append(blue_flag_captured)
+        self.info['red_flag_caught'].append(red_flag_captured)
 
         return self.state, reward, isDone, self.info 
 
