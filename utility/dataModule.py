@@ -38,19 +38,25 @@ class fake_agent:
     def get_loc(self):
         return (self.x, self.y)
 
-def meta_state_processor(full_state, game_info, map_size=20, flatten=False, reverse=False):
+def meta_state_processor(full_state, game_info=None, map_size=20, flatten=False, reverse=False):
     """meta_state_processor """
-    agent_locs = game_info['blue_locs']
-    enemy_locs = game_info['red_locs']
-    agent_alive = game_info['blue_alive']
-    enemy_alive = game_info['red_alive']
+    if game_info is None:
+        agent_locs = _find_coord(full_state, TEAM2_GV if reverse else TEAM1_GV)
+        enemy_locs = _find_coord(full_state, TEAM1_GV if reverse else TEAM2_GV)
+        agent_alive = [True]*len(agent_locs)
+        enemy_alive = [True]*len(anemy_locs)
+    else:
+        agent_locs = game_info['blue_locs']
+        enemy_locs = game_info['red_locs']
+        agent_alive = game_info['blue_alive']
+        enemy_alive = game_info['red_alive']
 
     # Build Shared State
-    flag_loc = _find_coord(full_state, TEAM1_FL if reverse else TEAM2_FL)
+    flag_loc = _find_coord(full_state, TEAM1_FL if reverse else TEAM2_FL, single_value=True)
     num_agent = len(agent_alive)
     num_alive_agent = sum(agent_alive)
     num_alive_enemy = sum(enemy_alive)
-    shared_state = (*flag_loc, num_alive_agent, num_alive_enemy)
+    shared_state = [(*flag_loc, num_alive_agent, num_alive_enemy)] * num_agent
 
     # Build Individual State
     oh_state = np.zeros((num_agent, *full_state.shape, 8))
@@ -63,8 +69,8 @@ def meta_state_processor(full_state, game_info, map_size=20, flatten=False, reve
         oh_state[idx,loc[0],loc[1],-1] = 1
 
     if flatten:
-        return np.reshape(oh_state, (num_agent, -1))
-    return oh_state
+        return np.reshape(oh_state, (num_agent, -1)), shared_state
+    return oh_state, shared_state
 
 def state_processor(state, agents=None, vision_radius=19, full_state=None, flatten=False, reverse=False, partial=True):
     """ pre_processor
