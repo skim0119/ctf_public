@@ -259,7 +259,11 @@ def _decompose_full_state(full_state, reverse=False):
         map_color.update({TEAM1_BG: 1, TEAM2_BG: 0,
                           TEAM1_GV: -1, TEAM2_GV: 1,
                           TEAM1_UAV: -1, TEAM2_UAV: 1,
+<<<<<<< HEAD
                           TEAM1_FL: -1, TEAM2_FL: 1})
+=======
+                          TEAM1_FL: -1, TEAM2_FL: 1}
+>>>>>>> d540c8b... add meta encoder
 
     # Full matrix operation
     for channel, val in map_color.items():
