@@ -319,10 +319,10 @@ class HAC_meta_controller:
     def get_critic(self, local_state, shared_state):
         feed_dict = {self.state_input_: np.stack(local_state),
                      self.gps_state_: np.stack(shared_state)}
-        critic = self.sess.run(self.critic_list, feed_dict)
+        critic = self.sess.run(self.critic, feed_dict)
         return critic.tolist()
 
-    def update_global(self, local_obs, gps_obs, action, advantage, td_target, strategy_id):
+    def update_global(self, local_obs, gps_obs, action, advantage, td_target):
         feed_dict = {self.state_input_ : np.array(local_obs),
                      self.gps_state_ : np.array(gps_obs),
                      self.action_ : np.array(action),

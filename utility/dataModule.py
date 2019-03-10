@@ -44,19 +44,19 @@ def meta_state_processor(full_state, game_info=None, map_size=20, flatten=False,
         agent_locs = _find_coord(full_state, TEAM2_GV if reverse else TEAM1_GV)
         enemy_locs = _find_coord(full_state, TEAM1_GV if reverse else TEAM2_GV)
         agent_alive = [True]*len(agent_locs)
-        enemy_alive = [True]*len(anemy_locs)
+        enemy_alive = [True]*len(enemy_locs)
     else:
         agent_locs = game_info['blue_locs']
         enemy_locs = game_info['red_locs']
-        agent_alive = game_info['blue_alive']
-        enemy_alive = game_info['red_alive']
+        agent_alive = game_info['blue_alive'][-1]
+        enemy_alive = game_info['red_alive'][-1]
 
     # Build Shared State
     flag_loc = _find_coord(full_state, TEAM1_FL if reverse else TEAM2_FL, single_value=True)
     num_agent = len(agent_alive)
     num_alive_agent = sum(agent_alive)
     num_alive_enemy = sum(enemy_alive)
-    shared_state = [(*flag_loc, num_alive_agent, num_alive_enemy)] * num_agent
+    shared_state = np.array([[*flag_loc, num_alive_agent, num_alive_enemy]] * num_agent)
 
     # Build Individual State
     oh_state = np.zeros((num_agent, *full_state.shape, 8))
@@ -240,7 +240,7 @@ def _find_coord(grid, element_id, single_value=False):
         Element number to find
     """
     # Find Location
-    locs = list(zip(*np.where(full_state == element_id)))
+    locs = list(zip(*np.where(grid== element_id)))
     if len(locs) == 0:
         return (-1,-1)
     if single_value:
@@ -250,10 +250,10 @@ def _find_coord(grid, element_id, single_value=False):
 
 def _decompose_full_state(full_state, reverse=False):
     """_decompose_full_state"""
-    oh_state = np.zeros((*(full_state.shape) , 6), dtype=np.float)
 
     # team 1 : (1), team 2 : (-1), map elements: (0)
     map_channel = SEVEN_MAP_CHANNEL
+    channel_size=7
     map_color = {UNKNOWN: 1, DEAD: 0,
                  TEAM1_BG: 0, TEAM2_BG: 1,
                  TEAM1_GV: 1,
@@ -268,6 +268,7 @@ def _decompose_full_state(full_state, reverse=False):
                           TEAM1_FL: -1, TEAM2_FL: 1})
 
     # Full matrix operation
+    oh_state = np.zeros((*(full_state.shape) , channel_size), dtype=np.float)
     for channel, val in map_color.items():
         if val == 1:
             oh_state[:, :, map_channel[channel]] += (full_state == channel).astype(np.int32)
