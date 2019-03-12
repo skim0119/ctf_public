@@ -49,9 +49,6 @@ class HAC_subcontroller:
 
         """
 
-        if log_path is not None:
-            self.logger = Tensor_logger(log_path, 'Train_Summary', sess)
-
         with tf.variable_scope(scope):
             self.state_input_ = tf.placeholder(shape=local_state_shape, dtype=tf.float32, name='state')
             self.gps_state_ = tf.placeholder(shape=shared_state_shape, dtype=tf.float32, name='gps_state')
@@ -84,6 +81,10 @@ class HAC_subcontroller:
                     self.entropy_list.append(entropy)
                     self.pull_op_list.append(pull_op)
                     self.update_ops_list.append(update_ops)
+
+        if log_path is not None:
+            self.logger = Tensor_logger(log_path, 'Train_summary', sess)
+
 
     def _build_loss(self, actor, action, advantage, td_target, critic):
         with tf.name_scope('train'):
