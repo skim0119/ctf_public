@@ -2,12 +2,25 @@ import tensorflow as tf
 import tensorflow.contrib.layers as layers
 import numpy as np
 
+from utility.utils import store_args
+
 
 """ Basic template for building new network module.
 
 Notes:
     Placeholder is indicated by underscore '_' at the end of the variable name
 """
+
+
+def initialize_uninitialized_vars(sess):
+    from itertools import compress
+    global_vars = tf.global_variables()
+    is_not_initialized = sess.run([~(tf.is_variable_initialized(var)) \
+                                   for var in global_vars])
+    not_initialized_vars = list(compress(global_vars, is_not_initialized))
+
+    if len(not_initialized_vars):
+        sess.run(tf.variables_initializer(not_initialized_vars))
 
 
 class Deep_layer:
@@ -44,6 +57,76 @@ class Deep_layer:
             if idx < len(hidden_layers)-1:
                 net = layers.dropout(net,dropout)
         return net
+
+class Tensor_logger:
+    @store_args
+    def __init__(self, log_path, summary_name, sess):
+        self.writer = tf.summary.FileWriter(log_path, sess.graph)
+        self.scalar_logger = Tensorboard_utility.scalar_logger
+
+    def log_scalar(self, tag, value, step):
+        self.scalar_logger(tag, value, step, self.writer)
+
+class Tensorboard_utility:
+    @staticmethod 
+    def scalar_logger(tag, value, step, writer):
+        """
+        Log a single scalar variable.
+
+        Parameter
+        ----------
+        tag : [string]
+            Name of the scalar (name of the plot)
+        value : [float]
+            value to record
+        step : [int]
+            training iteration
+        writer : [tf.summary.FileWriter]
+        """
+        summary = tf.Summary(value=[tf.Summary.Value(tag=tag, simple_value=value)])
+        writer.add_summary(summary, step)
+
+    @staticmethod
+    def variable_statistic_logger(var, include_min=False, include_max=False, mean=True, 
+            std=False, histogram=False, name_scope='summaries'):
+        """ 
+        Log variable statistic for a Tensorboard visualization
+
+        Parameters
+        ----------------
+
+        var : [Tensor] 
+             Scalar variable
+
+        include_min, include_max, mean, std : [bool] 
+            Toggle which statistic to include
+
+        histogram : [bool]
+            Toggle to include histogram
+
+        name_scope : [string] 
+
+        Returns
+        ----------------
+
+        list : [List]
+            list of the summary Tensor
+
+        """
+        summaries = []
+        with tf.name_scope(name_scope):
+            if mean:
+                summaries.append(tf.summary.scalar('mean', tf.reduce_mean(var)))
+            if std:
+                summaries.append(tf.summary.scalar('stddev',
+                    tf.sqrt(tf.reduce_mean(tf.square(var - mean)))))
+            if include_max:
+                summaries.append(tf.summary.scalar('max', tf.reduce_max(var)))
+            if include_min:
+                summaries.append(tf.summary.scalar('min', tf.reduce_min(var)))
+            if histogram:
+                summaries.append(tf.summary.histogram('histogram', var))
+        return summaries
 
 
 class Custom_initializers:

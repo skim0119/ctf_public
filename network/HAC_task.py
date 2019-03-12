@@ -5,7 +5,7 @@ import numpy as np
 
 from utility.utils import store_args
 
-from network.base import Deep_layer 
+from network.base import Deep_layer, Tensor_logger
 
 
 class HAC_subcontroller:
@@ -15,8 +15,6 @@ class HAC_subcontroller:
     Global network is expected to have same network structure.
     Actor Critic is implemented with convolution network and fully connected network.
 
-    Attributes:
-        pass
     Todo:
         pass
 
@@ -33,7 +31,9 @@ class HAC_subcontroller:
                  entropy_beta=0.001,
                  critic_beta=1.0,
                  sess=None,
-                 global_network=None):
+                 global_network=None,
+                 global_step=None,
+                 log_path=None):
         """ Initialize AC network and required parameters
 
         Keyword arguments:
@@ -48,6 +48,9 @@ class HAC_subcontroller:
         TODO:
 
         """
+
+        if log_path is not None:
+            self.logger = Tensor_logger(log_path, 'Train_Summary', sess)
 
         with tf.variable_scope(scope):
             self.state_input_ = tf.placeholder(shape=local_state_shape, dtype=tf.float32, name='state')
@@ -177,15 +180,26 @@ class HAC_subcontroller:
         critic = self.sess.run(self.critic_list[strategy_id], feed_dict)
         return critic.tolist()
 
-    def update_global(self, local_obs, gps_obs, action, advantage, td_target, strategy_id):
+    def update_global(self, local_obs, gps_obs, action, advantage, td_target, strategy_id,
+            log=False, step=None):
         feed_dict = {self.state_input_ : np.array(local_obs),
                      self.gps_state_ : np.array(gps_obs),
                      self.action_ : np.array(action),
                      self.td_target_ : np.array(td_target),
                      self.advantage_ : np.array(advantage)}
         self.sess.run(self.update_ops_list[strategy_id], feed_dict)
-        a_loss, c_loss, entropy = self.sess.run([self.actor_loss_list[strategy_id], self.critic_loss_list[strategy_id], self.entropy_list[strategy_id]], feed_dict)
-        return a_loss, c_loss, entropy
+
+        if log:
+            ops = [self.actor_loss_list[strategy_id],
+                   self.critic_loss_list[strategy_id],
+                   self.entropy_list[strategy_id] ]
+            a_loss, c_loss, entropy = self.sess.run(ops, feed_dict)
+            if step is None:
+                assert global_step is not None, "global step is not passed to logger"
+                step = self.sess.run(global_step)
+            self.logger.log_scalar(f'actor_loss_sid{strategy_id}', a_loss, step)
+            self.logger.log_scalar(f'critic_loss_sid{strategy_id}', c_loss, step)
+            self.logger.log_scalar(f'entropy_sid{strategy_id}', entropy, step)
 
     def pull_global(self, strategy_id):
         self.sess.run(self.pull_op_list[strategy_id])
