@@ -65,7 +65,7 @@ class Tensor_logger:
         self.scalar_logger = Tensorboard_utility.scalar_logger
 
     def log_scalar(self, tag, value, step):
-        self.scalar_logger(tag, value, step, self.writer)
+        self.scalar_logger(self.summary_name + '/' + tag, value, step, self.writer)
 
 class Tensorboard_utility:
     @staticmethod 
