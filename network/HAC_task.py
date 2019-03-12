@@ -195,8 +195,8 @@ class HAC_subcontroller:
                    self.entropy_list[strategy_id] ]
             a_loss, c_loss, entropy = self.sess.run(ops, feed_dict)
             if step is None:
-                assert global_step is not None, "global step is not passed to logger"
-                step = self.sess.run(global_step)
+                assert self.global_step is not None, "global step is not passed to logger"
+                step = self.sess.run(self.global_step)
             self.logger.log_scalar(f'actor_loss_sid{strategy_id}', a_loss, step)
             self.logger.log_scalar(f'critic_loss_sid{strategy_id}', c_loss, step)
             self.logger.log_scalar(f'entropy_sid{strategy_id}', entropy, step)
