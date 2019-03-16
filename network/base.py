@@ -71,12 +71,22 @@ class Deep_layer:
 
 class Tensor_logger:
     @store_args
-    def __init__(self, log_path, summary_name, sess):
-        self.writer = tf.summary.FileWriter(log_path, sess.graph)
-        self.scalar_logger = Tensorboard_utility.scalar_logger
+    def __init__(self, log_path, summary_name, sess, writer_id='0'):
+        self.writer = tf.summary.FileWriter(log_path, filename_suffix=writer_id)
+        #self.scalar_logger = Tensorboard_utility.scalar_logger
 
     def log_scalar(self, tag, value, step):
-        self.scalar_logger(self.summary_name + '/' + tag, value, step, self.writer)
+        #with tf.summary.FileWriter(self.log_path) as writer:
+        #    tag = self.summary_name + '/' + tag
+        #    summary = tf.Summary(value=[tf.Summary.Value(tag=tag, simple_value=value)])
+        #    writer.add_summary(summary, step)
+        #    writer.flush()
+
+        tag = self.summary_name + '/' + tag
+        summary = tf.Summary(value=[tf.Summary.Value(tag=tag, simple_value=value)])
+        self.writer.add_summary(summary, step)
+        #self.writer.flush()
+        #self.scalar_logger(self.summary_name + '/' + tag, value, step, self.writer)
 
     def set_histograms(self, var_list):
         '''for var in tf.trainable_variables(scope=global_scope):

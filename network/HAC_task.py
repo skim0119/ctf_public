@@ -5,7 +5,7 @@ import numpy as np
 
 from utility.utils import store_args
 
-from network.base import Deep_layer, Tensor_logger
+from network.base import Deep_layer, Tensorboard_utility
 
 
 class HAC_subcontroller:
@@ -82,10 +82,6 @@ class HAC_subcontroller:
                     self.pull_op_list.append(pull_op)
                     self.update_ops_list.append(update_ops)
 
-        if log_path is not None:
-            self.logger = Tensor_logger(log_path, 'Train_summary', sess)
-
-
     def _build_loss(self, actor, action, advantage, td_target, critic):
         with tf.name_scope('train'):
             # Critic (value) Loss
@@ -136,11 +132,11 @@ class HAC_subcontroller:
             net = Deep_layer.conv2d_pool(input_, [32,64,64], [5,3,2], [2,2,2], [1,1,1],
                                          padding='SAME', flatten=True)
             gps_array = Deep_layer.fc(input_layer=gps_,
-                                      hidden_layers=[64, 64],
+                                      hidden_layers=[64,64],
                                       dropout=1.0,
                                       scope='gps_proc')
             net = tf.concat([net, gps_array], 1)
-            net = layers.fully_connected(net, 64)
+            net = layers.fully_connected(net, 128)
             actor = layers.fully_connected(net,
                                            self.action_size,
                                            weights_initializer=layers.xavier_initializer(),
@@ -182,7 +178,7 @@ class HAC_subcontroller:
         return critic.tolist()
 
     def update_global(self, local_obs, gps_obs, action, advantage, td_target, strategy_id,
-            log=False, step=None):
+            log=False, writer=None):
         feed_dict = {self.state_input_ : np.array(local_obs),
                      self.gps_state_ : np.array(gps_obs),
                      self.action_ : np.array(action),
@@ -191,16 +187,16 @@ class HAC_subcontroller:
         self.sess.run(self.update_ops_list[strategy_id], feed_dict)
 
         if log:
+            assert self.global_step is not None, "global step is not passed to logger"
+            assert writer is not None, "writer is not given"
             ops = [self.actor_loss_list[strategy_id],
                    self.critic_loss_list[strategy_id],
                    self.entropy_list[strategy_id] ]
             a_loss, c_loss, entropy = self.sess.run(ops, feed_dict)
-            if step is None:
-                assert self.global_step is not None, "global step is not passed to logger"
-                step = self.sess.run(self.global_step)
-            self.logger.log_scalar(f'actor_loss_sid{strategy_id}', a_loss, step)
-            self.logger.log_scalar(f'critic_loss_sid{strategy_id}', c_loss, step)
-            self.logger.log_scalar(f'entropy_sid{strategy_id}', entropy, step)
+            step = self.sess.run(self.global_step)
+            Tensorboard_utility.scalar_logger(f'train_summary/entropy_sid{strategy_id}', entropy, step, writer)
+            Tensorboard_utility.scalar_logger(f'train_summary/a_loss_sid{strategy_id}', a_loss, step, writer)
+            Tensorboard_utility.scalar_logger(f'train_summary/c_loss_sid{strategy_id}', c_loss, step, writer)
 
     def pull_global(self, strategy_id):
         self.sess.run(self.pull_op_list[strategy_id])
