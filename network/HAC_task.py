@@ -104,13 +104,11 @@ class HAC_subcontroller:
     def _build_train(self, actor_loss, critic_loss,
                         a_vars, c_vars, a_targ_vars, c_targ_vars):
         def _build_pull(local_vars, global_vars):
-            with tf.name_scope('pull'):
-                pull_op = [local_var.assign(glob_var) for local_var, glob_var in zip(local_vars, global_vars)]
+            pull_op = [local_var.assign(glob_var) for local_var, glob_var in zip(local_vars, global_vars)]
             return pull_op
 
         def _build_push(grads, var, optimizer, tau=1.0):
-            with tf.name_scope('push'):
-                update_op = optimizer.apply_gradients(zip(grads, var))
+            update_op = optimizer.apply_gradients(zip(grads, var))
             return update_op
 
         with tf.name_scope('local_grad'):
@@ -119,13 +117,15 @@ class HAC_subcontroller:
 
         # Sync with Global Network
         with tf.name_scope('sync'):
-            pull_a_vars_op = _build_pull(a_vars, a_targ_vars)
-            pull_c_vars_op = _build_pull(c_vars, c_targ_vars)
-            pull_op = tf.group(pull_a_vars_op, pull_c_vars_op)
+            with tf.name_scope('pull'):
+                pull_a_vars_op = _build_pull(a_vars, a_targ_vars)
+                pull_c_vars_op = _build_pull(c_vars, c_targ_vars)
+                pull_op = tf.group(pull_a_vars_op, pull_c_vars_op)
 
-            update_a_op = _build_push(a_grads, a_targ_vars, self.actor_optimizer)
-            update_c_op = _build_push(c_grads, c_targ_vars, self.critic_optimizer)
-            update_ops = tf.group(update_a_op, update_c_op)
+            with tf.name_scope('push'):
+                update_a_op = _build_push(a_grads, a_targ_vars, self.actor_optimizer)
+                update_c_op = _build_push(c_grads, c_targ_vars, self.critic_optimizer)
+                update_ops = tf.group(update_a_op, update_c_op)
 
         return pull_op, update_ops
 
