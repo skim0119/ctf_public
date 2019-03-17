@@ -88,6 +88,8 @@ class Tensor_logger:
         #self.writer.flush()
         #self.scalar_logger(self.summary_name + '/' + tag, value, step, self.writer)
 
+        
+
     def set_histograms(self, var_list):
         '''for var in tf.trainable_variables(scope=global_scope):
             tf.summary.histogram(var.name, var)
@@ -111,6 +113,10 @@ class Tensorboard_utility:
         writer : [tf.summary.FileWriter]
         """
         summary = tf.Summary(value=[tf.Summary.Value(tag=tag, simple_value=value)])
+        writer.add_summary(summary, step)
+
+    @staticmethod
+    def histogram_logger(summary, step, writer):
         writer.add_summary(summary, step)
 
     @staticmethod

@@ -6,6 +6,7 @@ import numpy as np
 from utility.utils import store_args
 
 from network.base import Deep_layer, Tensorboard_utility
+from network.pg import Loss, Backpropagation
 
 
 class HAC_subcontroller:
@@ -49,6 +50,9 @@ class HAC_subcontroller:
 
         """
 
+        build_loss = Loss.softmax_cross_entropy_selection
+        build_train = Backpropagation.asynch_pipeline
+
         with tf.variable_scope(scope):
             self.state_input_ = tf.placeholder(shape=local_state_shape, dtype=tf.float32, name='state')
             self.gps_state_ = tf.placeholder(shape=shared_state_shape, dtype=tf.float32, name='gps_state')
@@ -72,58 +76,24 @@ class HAC_subcontroller:
                 self.c_vars_list.append(c_vars)
 
                 if global_network is not None:
-                    actor_loss, critic_loss, entropy = self._build_loss(actor, self.action_, self.advantage_, self.td_target_, critic)
-                    pull_op, update_ops = self._build_train(actor_loss, critic_loss,
-                                                            a_vars, c_vars,
-                                                            self.global_network.a_vars_list[strat_id], self.global_network.c_vars_list[strat_id])
+                    actor_loss, critic_loss, entropy = build_loss(actor, self.action_, self.advantage_, self.td_target_, critic, name_scope='loss_'+str(strat_id))
+                    pull_op, update_ops = build_train(actor_loss, critic_loss,
+                                                      a_vars, c_vars,
+                                                      self.global_network.a_vars_list[strat_id], self.global_network.c_vars_list[strat_id],
+                                                      self.actor_optimizer, self.critic_optimizer,
+                                                      name_scope='sync_'+str(strat_id))
                     self.actor_loss_list.append(actor_loss)
                     self.critic_loss_list.append(critic_loss)
                     self.entropy_list.append(entropy)
                     self.pull_op_list.append(pull_op)
                     self.update_ops_list.append(update_ops)
 
-    def _build_loss(self, actor, action, advantage, td_target, critic):
-        with tf.name_scope('train'):
-            # Critic (value) Loss
-            td_error = td_target - critic
-            entropy = -tf.reduce_mean(actor * tf.log(actor), name='entropy')
-            critic_loss = tf.reduce_mean(tf.square(td_error), name='critic_loss')
-
-            # Actor Loss
-            action_OH = tf.one_hot(action, self.action_size)
-            obj_func = tf.log(tf.reduce_sum(actor * action_OH, 1))
-            exp_v = obj_func * advantage
-            actor_loss = tf.reduce_mean(-exp_v, name='actor_loss') - self.entropy_beta * entropy
-
-        return actor_loss, critic_loss, entropy
-
-    def _build_train(self, actor_loss, critic_loss,
-                        a_vars, c_vars, a_targ_vars, c_targ_vars):
-        def _build_pull(local_vars, global_vars):
-            pull_op = [local_var.assign(glob_var) for local_var, glob_var in zip(local_vars, global_vars)]
-            return pull_op
-
-        def _build_push(grads, var, optimizer, tau=1.0):
-            update_op = optimizer.apply_gradients(zip(grads, var))
-            return update_op
-
-        with tf.name_scope('local_grad'):
-            a_grads = tf.gradients(actor_loss, a_vars)
-            c_grads = tf.gradients(critic_loss, c_vars)
-
-        # Sync with Global Network
-        with tf.name_scope('sync'):
-            with tf.name_scope('pull'):
-                pull_a_vars_op = _build_pull(a_vars, a_targ_vars)
-                pull_c_vars_op = _build_pull(c_vars, c_targ_vars)
-                pull_op = tf.group(pull_a_vars_op, pull_c_vars_op)
-
-            with tf.name_scope('push'):
-                update_a_op = _build_push(a_grads, a_targ_vars, self.actor_optimizer)
-                update_c_op = _build_push(c_grads, c_targ_vars, self.critic_optimizer)
-                update_ops = tf.group(update_a_op, update_c_op)
-
-        return pull_op, update_ops
+            # Summarize
+            if global_network is None:
+                summaries = []
+                for var in tf.trainable_variables(scope=scope):
+                    summaries.append(tf.summary.histogram(var.name, var))
+                self.merged_summary_op = tf.summary.merge(summaries)
 
     def _build_policy_network(self, input_, gps_, reuse=False, policy_id=0):
         policy_name = "policy_"+str(policy_id)
@@ -135,7 +105,7 @@ class HAC_subcontroller:
                                       hidden_layers=[64,64],
                                       dropout=1.0,
                                       scope='gps_proc')
-            net = tf.concat([net, gps_array], 1)
+            #net = tf.concat([net, gps_array], 1)
             net = layers.fully_connected(net, 128)
             actor = layers.fully_connected(net,
                                            self.action_size,
@@ -149,7 +119,6 @@ class HAC_subcontroller:
                                             biases_initializer=tf.zeros_initializer(),
                                             activation_fn=None)
             critic = tf.reshape(critic, [-1])
-
 
         a_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/'+policy_name)
         c_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/'+critic_name)
@@ -165,19 +134,19 @@ class HAC_subcontroller:
         a_probs, critic = self.sess.run([self.actor_list[strategy_id], self.critic_list[strategy_id]], feed_dict)
         return [np.random.choice(self.action_size, p=prob/sum(prob)) for prob in a_probs], critic
 
-    def run_sample(self, local_state, shared_state, strategy_id):
+    def run_sample(self, local_state, shared_state, strategy_id:int):
         feed_dict = {self.state_input_: np.stack(local_state),
                      self.gps_state_: np.stack(shared_state)}
         a_probs = self.sess.run(self.actor_list[strategy_id], feed_dict)
         return a_probs
 
-    def get_critic(self, local_state, shared_state, strategy_id):
+    def get_critic(self, local_state, shared_state, strategy_id:int):
         feed_dict = {self.state_input_: np.stack(local_state),
                      self.gps_state_: np.stack(shared_state)}
         critic = self.sess.run(self.critic_list[strategy_id], feed_dict)
         return critic.tolist()
 
-    def update_global(self, local_obs, gps_obs, action, advantage, td_target, strategy_id,
+    def update_global(self, local_obs, gps_obs, action, advantage, td_target, strategy_id:int,
             log=False, writer=None):
         feed_dict = {self.state_input_ : np.array(local_obs),
                      self.gps_state_ : np.array(gps_obs),
@@ -193,12 +162,15 @@ class HAC_subcontroller:
                    self.critic_loss_list[strategy_id],
                    self.entropy_list[strategy_id] ]
             a_loss, c_loss, entropy = self.sess.run(ops, feed_dict)
+            hist_summary = self.sess.run(self.global_network.merged_summary_op)
             step = self.sess.run(self.global_step)
             Tensorboard_utility.scalar_logger(f'train_summary/entropy_sid{strategy_id}', entropy, step, writer)
             Tensorboard_utility.scalar_logger(f'train_summary/a_loss_sid{strategy_id}', a_loss, step, writer)
             Tensorboard_utility.scalar_logger(f'train_summary/c_loss_sid{strategy_id}', c_loss, step, writer)
+            Tensorboard_utility.histogram_logger(hist_summary, step, writer)
 
-    def pull_global(self, strategy_id):
+
+    def pull_global(self, strategy_id:int):
         self.sess.run(self.pull_op_list[strategy_id])
 
     def pull_global_all(self):
