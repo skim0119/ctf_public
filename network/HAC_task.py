@@ -29,7 +29,7 @@ class HAC_subcontroller:
                  strategy_size=3,
                  lr_actor=1e-4,
                  lr_critic=1e-4,
-                 entropy_beta=0.001,
+                 entropy_beta=0,
                  critic_beta=1.0,
                  sess=None,
                  global_network=None,
@@ -61,8 +61,6 @@ class HAC_subcontroller:
                 self.td_target_ = tf.placeholder(shape=[None], dtype=tf.float32, name='td_target_holder')
                 self.advantage_ = tf.placeholder(shape=[None], dtype=tf.float32, name='adv_holder')
 
-            self.critic_optimizer = tf.train.AdamOptimizer(self.lr_critic, name='Adam_critic')
-            self.actor_optimizer = tf.train.AdamOptimizer(self.lr_actor, name='Adam_actor')
 
             # Build policy for each strategies
             self.actor_list, self.critic_list, self.a_vars_list, self.c_vars_list = [],[],[],[]
@@ -79,8 +77,8 @@ class HAC_subcontroller:
                     actor_loss, critic_loss, entropy = build_loss(actor, self.action_, self.advantage_, self.td_target_, critic, name_scope='loss_'+str(strat_id))
                     pull_op, update_ops = build_train(actor_loss, critic_loss,
                                                       a_vars, c_vars,
-                                                      self.global_network.a_vars_list[strat_id], self.global_network.c_vars_list[strat_id],
-                                                      self.actor_optimizer, self.critic_optimizer,
+                                                      global_network.a_vars_list[strat_id], global_network.c_vars_list[strat_id],
+                                                      lr_actor, lr_critic,
                                                       name_scope='sync_'+str(strat_id))
                     self.actor_loss_list.append(actor_loss)
                     self.critic_loss_list.append(critic_loss)
@@ -278,12 +276,10 @@ class HAC_meta_controller:
                                             activation_fn=None)
             critic = tf.reshape(critic, [-1])
 
-
         a_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/'+policy_name)
         c_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope+'/'+critic_name)
 
         return actor, critic, a_vars, c_vars
-
 
     # Update global network with local gradients
     # Choose Action

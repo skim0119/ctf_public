@@ -40,9 +40,9 @@ class Loss:
             actor_loss = Loss._softmax_cross_entropy(softmax, action, reward, actor_weight)
 
             if entropy_beta != 0:
-                actor_loss += entropy_beta * entropy
+                actor_loss += tf.stop_gradient(entropy_beta * entropy)
             if critic_beta != 0:
-                actor_loss += critic_beta * critic_loss 
+                actor_loss += tf.stop_gradient(critic_beta * critic_loss)
 
         return actor_loss, critic_loss, entropy
 
@@ -74,14 +74,19 @@ class Backpropagation:
     """
     @staticmethod
     def asynch_pipeline(actor_loss, critic_loss,
-                        a_vars, c_vars, a_targ_vars, c_targ_vars,
-                        actor_optimizer, critic_optimizer,
+                        a_vars, c_vars,
+                        a_targ_vars, c_targ_vars,
+                        lr_actor, lr_critic,
                         name_scope='sync'):
         # Sync with Global Network
         with tf.name_scope(name_scope):
+            critic_optimizer = tf.train.AdamOptimizer(lr_critic)
+            actor_optimizer = tf.train.AdamOptimizer(lr_actor)
+
             with tf.name_scope('local_grad'):
                 a_grads = tf.gradients(actor_loss, a_vars)
                 c_grads = tf.gradients(critic_loss, c_vars)
+
             with tf.name_scope('pull'):
                 pull_a_vars_op = Backpropagation._build_pull(a_vars, a_targ_vars)
                 pull_c_vars_op = Backpropagation._build_pull(c_vars, c_targ_vars)
