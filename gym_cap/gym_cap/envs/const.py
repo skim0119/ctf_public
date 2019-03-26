@@ -20,8 +20,8 @@ UGV_A_RANGE = 2
 RL_SUGGESTIONS = False
 
 STOCH_TRANSITIONS = False
-STOCH_ATTACK = False
-STOCH_ZONES = False
+STOCH_ATTACK = True
+STOCH_ZONES = True
 
 # MapConst
 """ Defining the constants for map and environment """
