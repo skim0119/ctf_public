@@ -29,15 +29,15 @@ class Loss:
     """
 
     @staticmethod
-    def softmax_cross_entropy_selection(softmax, action, reward,
+    def softmax_cross_entropy_selection(softmax_logit, action, reward,
                                         td_target, critic,
                                         entropy_beta=0, critic_beta=0,
                                         actor_weight=None, critic_weight=None,
                                         name_scope='loss'):
         with tf.name_scope(name_scope):
-            entropy = -tf.reduce_mean(softmax * tf.log(softmax), name='entropy')
+            entropy = -tf.reduce_mean(softmax_logit * tf.log(softmax_logit), name='entropy')
             critic_loss = Loss._td_difference(td_target, critic, critic_weight)
-            actor_loss = Loss._softmax_cross_entropy(softmax, action, reward, actor_weight)
+            actor_loss = Loss._softmax_cross_entropy(softmax_logit, action, reward, actor_weight)
 
             if entropy_beta != 0:
                 actor_loss += tf.stop_gradient(entropy_beta * entropy)
@@ -70,8 +70,7 @@ class Loss:
         return actor_loss
 
 class Backpropagation:
-    """Asynchronous training pipelines
-    """
+    """Asynchronous training pipelines"""
     @staticmethod
     def asynch_pipeline(actor_loss, critic_loss,
                         a_vars, c_vars,
