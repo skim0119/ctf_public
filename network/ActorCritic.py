@@ -5,8 +5,8 @@ import numpy as np
 
 from utility.utils import store_args
 
-from base import Deep_layer
-from pg import Loss, Backpropagation
+from network.base import Deep_layer
+from network.pg import Loss, Backpropagation
 
 
 class ActorCritic:
@@ -270,7 +270,6 @@ class ActorCritic_v2:
                  scope,
                  lr_actor=1e-4,
                  lr_critic=1e-4,
-                 global_step=None,
                  entropy_beta=0.001,
                  critic_beta=1.0,
                  sess=None,
@@ -300,7 +299,7 @@ class ActorCritic_v2:
                 self.td_target_ = tf.placeholder(shape=[None], dtype=tf.float32, name='td_target_hold')
                 self.advantage_ = tf.placeholder(shape=[None], dtype=tf.float32, name='adv_hold')
 
-                self.actor_loss, self.critic_loss, self.entropy = Loss.softmax_cross_entropy_selection(self.actor, self.action_, self.advantage_, self.td_target_, self.critic)
+                self.actor_loss, self.critic_loss, self.entropy = Loss.softmax_cross_entropy_selection(self.actor, self.action_, self.advantage_, self.td_target_, self.critic, entropy_beta)
 
                 self.pull_op, self.update_ops = Backpropagation.asynch_pipeline(self.actor_loss, self.critic_loss,
                         self.a_vars, self.c_vars, global_network.a_vars, global_network.c_vars, lr_actor, lr_critic)
@@ -355,3 +354,7 @@ class ActorCritic_v2:
 
     def pull_global(self):
         self.sess.run(self.pull_op)
+
+    @property
+    def get_vars(self):
+        return self.a_vars + self.c_vars
