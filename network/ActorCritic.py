@@ -290,11 +290,7 @@ class ActorCritic_v2:
             self.actor, self.critic, self.a_vars, self.c_vars = self._build_network(self.state_input)
 
             # Local Network
-            if scope == 'global':
-                # Optimizer
-                self.critic_optimizer = tf.train.AdamOptimizer(self.lr_critic, name='adam_critic')
-                self.actor_optimizer = tf.train.AdamOptimizer(self.lr_actor, name='adam_actor')
-            else:
+            if scope != 'global':
                 self.action_ = tf.placeholder(shape=[None], dtype=tf.int32, name='action_hold')
                 self.td_target_ = tf.placeholder(shape=[None], dtype=tf.float32, name='td_target_hold')
                 self.advantage_ = tf.placeholder(shape=[None], dtype=tf.float32, name='adv_hold')
@@ -308,6 +304,7 @@ class ActorCritic_v2:
                 summaries = []
                 #for var in tf.trainable_variables(scope=scope):
                 for var in self.a_vars + self.c_vars:
+                    var_name = var.name.replace(":","_")
                     summaries.append(tf.summary.histogram(var.name, var))
                 self.merged_summary_op = tf.summary.merge(summaries)
                 
