@@ -52,7 +52,7 @@ class ActorCritic:
                  critic_beta=1.0,
                  sess=None,
                  global_network=None,
-                 separate_train=False):
+                 separate_train=True):
         """ Initialize AC network and required parameters
 
         Keyword arguments:
@@ -248,6 +248,10 @@ class ActorCritic:
     def pull_global(self):
         self.sess.run(self.pull_op)
 
+    @property
+    def get_vars(self):
+        return self.a_vars + self.c_vars
+
 class ActorCritic_v2:
     """Actor Critic Network Implementation for A3C (Tensorflow)
 
@@ -260,7 +264,7 @@ class ActorCritic_v2:
     Actor Critic is implemented with convolution network and fully connected network.
 
     Todo:
-        pass
+        * Organize the code with pep8 formating
 
     """
     @store_args
@@ -274,16 +278,10 @@ class ActorCritic_v2:
                  critic_beta=1.0,
                  sess=None,
                  global_network=None):
-        """ Initialize AC network and required parameters
-
-        TODO:
-            * Organize the code with pep8 formating
-
-        """
+        """ Initialize AC network and required parameters """
 
         with tf.variable_scope(scope):
             # global Network
-            # Build actor and critic network weights. (global network does not need training sequence)
             self.state_input = tf.placeholder(shape=in_size, dtype=tf.float32, name='state')
 
             # get the parameters of actor and critic networks
@@ -305,7 +303,7 @@ class ActorCritic_v2:
                 #for var in tf.trainable_variables(scope=scope):
                 for var in self.a_vars + self.c_vars:
                     var_name = var.name.replace(":","_")
-                    summaries.append(tf.summary.histogram(var.name, var))
+                    summaries.append(tf.summary.histogram(var_name, var))
                 self.merged_summary_op = tf.summary.merge(summaries)
                 
 
