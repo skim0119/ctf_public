@@ -39,6 +39,8 @@ class CapEnv(gym.Env):
         self.num_red_uav = NUM_UAV
         self.num_grey = NUM_GRAY
 
+        self.red_partial_visibility = True
+
         self.seed()
         self.reset(map_size, mode=mode)
         self.viewer = None
@@ -337,7 +339,12 @@ class CapEnv(gym.Env):
 
         # Get actions from uploaded policies
         try:
-            move_list_red = self.policy_red.gen_action(self.team_red,self.observation_space_red,free_map=self.team_home)
+            if self.red_partial_visibility:
+                move_list_red = self.policy_red.gen_action(self.team_red,
+                    self.observation_space_red,free_map=self.team_home)
+            else:
+                move_list_red = self.policy_red.gen_action(self.team_red,
+                    self._env,free_map=self.team_home)
         except:
             print("No valid policy for red team")
             exit()
