@@ -1,0 +1,201 @@
+"""
+a3c.py module includes basic modules and implementation of A3C for CtF environment.
+
+Some of the methods are left unimplemented which makes the a3c module to be parent abstraction.
+
+Script contains example A3C
+"""
+
+import tensorflow as tf
+import tensorflow.contrib.layers as layers
+
+import numpy as np
+
+from utility.utils import store_args
+
+from network.base import Deep_layer
+from network.pg import Loss, Backpropagation
+
+class a3c:
+    """ A3C Module
+
+    Base module for a3c without any variation.
+    """
+
+    @store_args
+    def __init__(self,
+                 in_size,
+                 action_size,
+                 scope,
+                 lr_actor=1e-4,
+                 lr_critic=1e-4,
+                 entropy_beta=0.001,
+                 critic_beta=1.0,
+                 sess=None,
+                 global_network=None,
+                 **kwargs):
+        assert sess is not None, "TF Session is not given."
+
+        trainable = global_network is not None
+
+        #$$$$$$$ Loss/Backpropagation $$$$$$$$
+        loss = kwargs.get('loss', Loss.softmax_cross_entropy_selection)
+        backprop = kwargs.get('back_prop', Backpropagation.asynch_pipeline)
+        #$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+        with tf.variable_scope(scope):
+            _build_placeholder(in_size, trainable)
+
+            # get the parameters of actor and critic networks
+            _ = self._build_network(self.state_input)
+            self.actor, self.critic, self.a_vars, self.c_vars = _
+
+            # Local Network
+            if trainable:
+                train_args = (self.action_, self.advantage_, self.td_target_)
+                loss = loss(self.actor, *train_args, self.critic, entropy_beta)
+                self.actor_loss, self.critic_loss, self.entropy = loss
+
+                _ = backprop(self.actor_loss, self.critic_loss, self.a_vars, self.c_vars, global_network.a_vars, global_network.c_vars, lr_actor, lr_critic)
+                self.pull_op, self.update_ops = _
+
+        self.merged_summary_op = _build_summary(self.a_vars+self.c_vars)
+
+    def _build_placeholder(self, input_shape, trainable:bool):
+        self.state_input = tf.placeholder(shape=input_shape, dtype=tf.float32, name='input_hold')
+        if trainable:
+            self.action_ = tf.placeholder(shape=[None], dtype=tf.int32, name='action_hold')
+            self.td_target_ = tf.placeholder(shape=[None], dtype=tf.float32, name='td_target_hold')
+            self.advantage_ = tf.placeholder(shape=[None], dtype=tf.float32, name='adv_hold')
+
+    def _build_summary(self, vars_list:list):
+        """ _build_summary (Implementation required)
+
+        Given the list of tensor variables, returns summary operator of histogram.
+        Mostly used for summarizing the weights of the layer.
+
+        ex) 
+            var_record = _build_summary(actor_vars)
+            sess.run(var_record, feed_dict)
+
+        Parameters
+        ----------------
+        vars_list: variables in List form
+
+        Returns
+        ----------------
+        Scalar Tensor of String: Serialized Summary protocol for variables histogram
+        """
+
+        summaries = []
+        for var in vars_list:
+            var_name = var.name.replace(":","_") # colon (:) is not allowed in TF board
+            summaries.append(tf.summary.histogram(var_name, var))
+        return tf.summary.merge(sumamries)
+
+    def _build_network(self, input_holder):
+        """ _build_network
+
+        Network is not pre-implemented for further customization.
+
+        Parameters
+        ----------------
+        input_holder : [tf.placeholder] 
+
+        Returns
+        ----------------
+        actor : [Tensor]
+        critic: [Tensor]
+        a_vars : [List]
+            variables in Actor layers
+        c_vars : [List]
+            variables in Critic layers
+
+        """
+        raise NotImplementedError
+
+    def run_network(self, states):
+        """ run_network
+        Parameters
+        ----------------
+        states : [List/np.array] 
+
+        Returns
+        ----------------
+            action : [List]
+            critic : [List]
+        """
+
+        feed_dict = {self.state_input : states}
+        a_probs, critic = self.sess.run([self.actor, self.critic], feed_dict)
+        return [np.random.choice(self.action_size, p=prob/sum(prob)) for prob in a_probs], critic
+    
+    def run_sample(self, states):
+        feed_dict = {self.state_input : states}
+        a_probs, critic = self.sess.run([self.actor, self.critic], feed_dict)
+        a_probs = self.sess.run(self.actor, feed_dict)
+        return a_probs
+
+    def update_global(self, state_input, action, td_target, advantage, log=False):
+        feed_dict = {self.state_input : state_input,
+                     self.action_ : action,
+                     self.td_target_ : td_target,
+                     self.advantage_ : advantage}
+        self.sess.run(self.update_ops, feed_dict)
+
+        queries = [self.actor_loss, self.critic_loss, self.entropy]
+        aloss, closs, entropy = self.sess.run(queries, feed_dict)
+
+        return aloss, closs, entropy
+
+    def pull_global(self):
+        self.sess.run(self.pull_op)
+
+    @property
+    def get_vars(self):
+        return self.a_vars + self.c_vars
+
+
+class ActorCritic(a3c):
+    """Actor Critic Network Implementation for A3C (Tensorflow)
+
+    This module provides simplest template for using a3c module prescribed above.
+
+    """
+
+    def __init__(self, in_size, action_size, scope,
+                 lr_actor=1e-4, lr_critic=1e-4,
+                 entropy_beta=0.001, critic_beta=1.0,
+                 sess=None, global_network=None):
+        """ Initialize AC network and required parameters """
+        super(ActorCritic, self).__init__(in_size, action_size, scope, lr_actor, lr_critic, entropy_beta, critic_beta, sess, global_network)
+
+    def _build_network(self, input_hold):
+        actor_name = self.scope + '/actor'
+        critic_name = self.scope + '/critic'
+        with tf.variable_scope('actor'):
+            net = Deep_layer.conv2d_pool(input_layer=input_hold,
+                                         channels=[32,64,64],
+                                         kernels=[5,3,2],
+                                         pools=[2,2,1],
+                                         strides=[2,2,1],
+                                         flatten=True)
+            net = layers.fully_connected(net, 128)
+            actor = layers.fully_connected(net,
+                                           self.action_size,
+                                           weights_initializer=layers.xavier_initializer(),
+                                           biases_initializer=tf.zeros_initializer(),
+                                           activation_fn=tf.nn.softmax)
+        with tf.variable_scope('critic'):
+            critic = layers.fully_connected(net,
+                                            1,
+                                            weights_initializer=layers.xavier_initializer(),
+                                            biases_initializer=tf.zeros_initializer(),
+                                            activation_fn=None)
+            critic = tf.reshape(critic, [-1])
+
+        a_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=actor_name)
+        c_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=critic_name)
+
+        return actor, critic, a_vars, c_vars
+
