@@ -38,13 +38,13 @@ class a3c:
 
         trainable = global_network is not None
 
-        #$$$$$$$ Loss/Backpropagation $$$$$$$$
+        #$$$$$$$ Loss/Backpropagation $$$$$$$#
         loss = kwargs.get('loss', Loss.softmax_cross_entropy_selection)
         backprop = kwargs.get('back_prop', Backpropagation.asynch_pipeline)
-        #$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+        #$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$#
 
         with tf.variable_scope(scope):
-            _build_placeholder(in_size, trainable)
+            self._build_placeholder(in_size, trainable)
 
             # get the parameters of actor and critic networks
             _ = self._build_network(self.state_input)
@@ -59,10 +59,10 @@ class a3c:
                 _ = backprop(self.actor_loss, self.critic_loss, self.a_vars, self.c_vars, global_network.a_vars, global_network.c_vars, lr_actor, lr_critic)
                 self.pull_op, self.update_ops = _
 
-        self.merged_summary_op = _build_summary(self.a_vars+self.c_vars)
+        self.merged_summary_op = self._build_summary(self.a_vars+self.c_vars)
 
     def _build_placeholder(self, input_shape, trainable:bool):
-        self.state_input = tf.placeholder(shape=input_shape, dtype=tf.float32, name='input_hold')
+        self.state_input = tf.placeholder(shape=input_shape, dtype=tf.float32, name='state')
         if trainable:
             self.action_ = tf.placeholder(shape=[None], dtype=tf.int32, name='action_hold')
             self.td_target_ = tf.placeholder(shape=[None], dtype=tf.float32, name='td_target_hold')
@@ -91,7 +91,7 @@ class a3c:
         for var in vars_list:
             var_name = var.name.replace(":","_") # colon (:) is not allowed in TF board
             summaries.append(tf.summary.histogram(var_name, var))
-        return tf.summary.merge(sumamries)
+        return tf.summary.merge(summaries)
 
     def _build_network(self, input_holder):
         """ _build_network
@@ -137,14 +137,32 @@ class a3c:
         return a_probs
 
     def update_global(self, state_input, action, td_target, advantage, log=False):
+        """ update_global
+
+        Run all update and back-propagation sequence given the necessary inputs.
+
+        Parameters
+        ----------------
+        log : [bool] 
+             logging option 
+
+        Returns
+        ----------------
+        aloss : [Double]
+        closs : [Double]
+        entropy : [Double]
+        """
         feed_dict = {self.state_input : state_input,
                      self.action_ : action,
                      self.td_target_ : td_target,
                      self.advantage_ : advantage}
         self.sess.run(self.update_ops, feed_dict)
 
-        queries = [self.actor_loss, self.critic_loss, self.entropy]
-        aloss, closs, entropy = self.sess.run(queries, feed_dict)
+        ops = [self.actor_loss, self.critic_loss, self.entropy]
+        aloss, closs, entropy = self.sess.run(ops, feed_dict)
+
+        if log:
+            raise NotImplementedError
 
         return aloss, closs, entropy
 

@@ -165,7 +165,7 @@ class ActorCritic:
                                                 activation_fn=tf.nn.softmax)
 
         with tf.variable_scope('critic'):
-            self.critic = layers.fully_connected(net,
+            self.critic = layers.fully_connected(tf.stop_gradient(net),
                                                  1,
                                                  weights_initializer=layers.xavier_initializer(),
                                                  biases_initializer=tf.zeros_initializer(),
@@ -257,6 +257,7 @@ class ActorCritic_v2:
                                          channels=[32,64,64],
                                          kernels=[5,3,2],
                                          pools=[2,2,1],
+                                         strides=[2,1,1],
                                          flatten=True)
             net = layers.fully_connected(net, 128)
             actor = layers.fully_connected(net,
