@@ -92,19 +92,13 @@ class Backpropagation:
                 pull_op = tf.group(pull_a_vars_op, pull_c_vars_op)
 
             with tf.name_scope('push'):
-                update_a_op = Backpropagation._build_push(a_grads, a_targ_vars, actor_optimizer)
-                update_c_op = Backpropagation._build_push(c_grads, c_targ_vars, critic_optimizer)
+                update_a_op = actor_optimizer.apply_gradients(zip(a_grads, a_targ_vars))
+                update_c_op = critic_optimizer.apply_gradients(zip(c_grads, c_targ_vars))
                 update_ops = tf.group(update_a_op, update_c_op)
 
         return pull_op, update_ops
 
     @staticmethod
-    def _build_pull(local, shared):
-        pull_op = [local_var.assign(glob_var) for local_var, glob_var in zip(local, shared)]
+    def _build_pull(to_vars, from_vars):
+        pull_op = [var.assign(value) for var, value in zip(to_vars, from_vars)]
         return pull_op
-
-    @staticmethod
-    def _build_push(grads, var, optimizer):
-        update_op = optimizer.apply_gradients(zip(grads, var))
-        return update_op
-
