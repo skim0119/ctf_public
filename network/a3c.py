@@ -56,7 +56,10 @@ class a3c:
                 loss = loss(self.actor, *train_args, self.critic, entropy_beta)
                 self.actor_loss, self.critic_loss, self.entropy = loss
 
-                _ = backprop(self.actor_loss, self.critic_loss, self.a_vars, self.c_vars, global_network.a_vars, global_network.c_vars, lr_actor, lr_critic)
+                _ = backprop(self.actor_loss, self.critic_loss,
+                             self.a_vars, self.c_vars,
+                             global_network.a_vars, global_network.c_vars,
+                             lr_actor, lr_critic)
                 self.pull_op, self.update_ops = _
 
         self.merged_summary_op = self._build_summary(self.a_vars+self.c_vars)
@@ -186,7 +189,8 @@ class ActorCritic(a3c):
                  entropy_beta=0.001, critic_beta=1.0,
                  sess=None, global_network=None):
         """ Initialize AC network and required parameters """
-        super(ActorCritic, self).__init__(in_size, action_size, scope, lr_actor, lr_critic, entropy_beta, critic_beta, sess, global_network)
+        super(ActorCritic, self).__init__(in_size, action_size,
+                scope, lr_actor, lr_critic, entropy_beta, critic_beta, sess, global_network)
 
     def _build_network(self, input_hold):
         actor_name = self.scope + '/actor'

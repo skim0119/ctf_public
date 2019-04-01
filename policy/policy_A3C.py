@@ -33,11 +33,9 @@ class PolicyGen:
     """
 
     def __init__(self,
-                 free_map,
-                 agent_list,
-                 model_dir,
-                 input_name,
-                 output_name,
+                 model_dir='./model/A3C_benchmark/',
+                 input_name='global/state:0',
+                 output_name='global/actor/fully_connected_1/Softmax:0',
                  color='blue',
                  import_scope=None
                  ):
@@ -51,6 +49,8 @@ class PolicyGen:
         Initiate session
         """
 
+        self.input_shape = 19
+
         # Switches
         self.deterministic = False
         self.full_observation = True
@@ -59,7 +59,7 @@ class PolicyGen:
         self.model_dir = model_dir  # Default
         self.input_name = input_name
         self.output_name = output_name
-        self.reset_network(self.input_name, self.output_name, import_scope)
+        #self.reset_network(self.input_name, self.output_name, import_scope)
 
     def gen_action(self, agent_list, observation, free_map=None):
         """Action generation method.
@@ -92,34 +92,36 @@ class PolicyGen:
 
         return action_out
 
-    def reset_network_weight(self, input_name='state:0', output_name='action:0'):
-        """reset_network_weight
-
-        :param input_name:
-        :param output_name:
-        """
+    def reset_network_weight(self, input_name=None, output_name=None):
+        if input_name is None:
+            input_name = self.input_name
+        if output_name is None:
+            output_name = self.output_name
         ckpt = tf.train.get_checkpoint_state(self.model_dir)
         if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
             self.saver.restore(self.sess, ckpt.model_checkpoint_path)
-            print('Weight is succesfully loaded.', ckpt.model_checkpoint_path)
+            #print('Weight is succesfully loaded.', ckpt.model_checkpoint_path)
         else:
-            print('Error : Graph is not loaded')
+            #print('Error : Graph is not loaded')
+            pass
 
-    def reset_network(self, input_name='state:0', output_name='action:0', im_scope=None):
+    def reset_network(self, input_name=None, output_name=None, scope=None):
         """reset_network
-
-        :param input_name:
-        :param output_name:
-        :param im_scope:
         """
+        if input_name is None:
+            input_name = self.input_name
+        if output_name is None:
+            output_name = self.output_name
+
         # Reset the weight to the newest saved weight.
         ckpt = tf.train.get_checkpoint_state(self.model_dir)
+        print(f'path find: {ckpt.model_checkpoint_path}')
         if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
             print(f'path exist : {ckpt.model_checkpoint_path}')
             self.graph = tf.Graph()
             self.sess = tf.Session(graph=self.graph)
             with self.graph.as_default():
-                self.saver = tf.train.import_meta_graph(ckpt.model_checkpoint_path + '.meta', import_scope=im_scope, clear_devices=True)
+                self.saver = tf.train.import_meta_graph(ckpt.model_checkpoint_path + '.meta', import_scope=scope, clear_devices=True)
                 self.saver.restore(self.sess, ckpt.model_checkpoint_path)
                 #print([n.name for n in self.graph.as_graph_def().node])
 
@@ -130,24 +132,8 @@ class PolicyGen:
                     self.action = self.graph.get_tensor_by_name(output_name)
                     #print([n.name for n in self.graph.as_graph_def().node])
 
-            self.input_shape = 19
             print('Graph is succesfully loaded.', ckpt.model_checkpoint_path)
         else:
             print('Error : Graph is not loaded')
             raise NameError
 
-    def set_directory(self, model_dir):
-        """set_directory
-
-        :param model_dir:
-        """
-        self.model_dir = model_dir
-
-    def set_deterministic(self, b):
-        """set_deterministic
-
-        Change deterministic/stochastic algorithm
-
-        :param b:
-        """
-        self.deterministic = b
