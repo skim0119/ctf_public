@@ -59,6 +59,7 @@ class PolicyGen:
         self.model_dir = model_dir  # Default
         self.input_name = input_name
         self.output_name = output_name
+        self._reset_done = False
         #self.reset_network(self.input_name, self.output_name, import_scope)
 
     def gen_action(self, agent_list, observation, free_map=None):
@@ -93,17 +94,18 @@ class PolicyGen:
         return action_out
 
     def reset_network_weight(self, input_name=None, output_name=None):
-        if input_name is None:
-            input_name = self.input_name
-        if output_name is None:
-            output_name = self.output_name
-        ckpt = tf.train.get_checkpoint_state(self.model_dir)
-        if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
-            self.saver.restore(self.sess, ckpt.model_checkpoint_path)
-            #print('Weight is succesfully loaded.', ckpt.model_checkpoint_path)
+        if not _reset_done:
+            self.reset_network()
         else:
-            #print('Error : Graph is not loaded')
-            pass
+            if input_name is None:
+                input_name = self.input_name
+            if output_name is None:
+                output_name = self.output_name
+            ckpt = tf.train.get_checkpoint_state(self.model_dir)
+            if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
+                self.saver.restore(self.sess, ckpt.model_checkpoint_path)
+            else:
+                raise AssertionError
 
     def reset_network(self, input_name=None, output_name=None, scope=None):
         """reset_network
