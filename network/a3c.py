@@ -16,6 +16,8 @@ from utility.utils import store_args
 from network.base import Deep_layer
 from network.pg import Loss, Backpropagation
 
+from network.base import Tensorboard_utility as TB
+
 class a3c:
     """ A3C Module
 
@@ -30,7 +32,6 @@ class a3c:
                  lr_actor=1e-4,
                  lr_critic=1e-4,
                  entropy_beta=0.001,
-                 critic_beta=1.0,
                  sess=None,
                  global_network=None,
                  **kwargs):
@@ -139,7 +140,7 @@ class a3c:
         a_probs = self.sess.run(self.actor, feed_dict)
         return a_probs
 
-    def update_global(self, state_input, action, td_target, advantage, log=False):
+    def update_global(self, state_input, action, td_target, advantage):
         """ update_global
 
         Run all update and back-propagation sequence given the necessary inputs.
@@ -186,11 +187,11 @@ class ActorCritic(a3c):
 
     def __init__(self, in_size, action_size, scope,
                  lr_actor=1e-4, lr_critic=1e-4,
-                 entropy_beta=0.001, critic_beta=1.0,
+                 entropy_beta=0.001,
                  sess=None, global_network=None):
         """ Initialize AC network and required parameters """
         super(ActorCritic, self).__init__(in_size, action_size,
-                scope, lr_actor, lr_critic, entropy_beta, critic_beta, sess, global_network)
+                scope, lr_actor, lr_critic, entropy_beta, sess, global_network)
 
     def _build_network(self, input_hold):
         actor_name = self.scope + '/actor'
