@@ -140,7 +140,7 @@ class a3c:
         a_probs = self.sess.run(self.actor, feed_dict)
         return a_probs
 
-    def update_global(self, state_input, action, td_target, advantage):
+    def update_global(self, state_input, action, td_target, advantage, log=False):
         """ update_global
 
         Run all update and back-propagation sequence given the necessary inputs.

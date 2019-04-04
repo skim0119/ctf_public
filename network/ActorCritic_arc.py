@@ -52,7 +52,7 @@ class ActorCritic:
                  critic_beta=1.0,
                  sess=None,
                  global_network=None,
-                 separate_train=True):
+                 separate_train=False):
         """ Initialize AC network and required parameters
 
         Keyword arguments:
@@ -126,7 +126,7 @@ class ActorCritic:
                     self.optimizer = tf.train.AdamOptimizer(self.lr_critic, name='Adam')
             else:
                 self.action_ = tf.placeholder(shape=[None], dtype=tf.int32, name='action_holder')
-                self.action_OH = tf.one_hot(self.action_, action_size)
+                self.action_OH = tf.one_hot(self.action_, action_size, dtype=tf.float32)
                 self.td_target_ = tf.placeholder(
                     shape=[None], dtype=tf.float32, name='td_target_holder')
                 self.advantage_ = tf.placeholder(shape=[None], dtype=tf.float32, name='adv_holder')

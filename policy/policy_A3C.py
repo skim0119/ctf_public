@@ -94,7 +94,7 @@ class PolicyGen:
         return action_out
 
     def reset_network_weight(self, input_name=None, output_name=None):
-        if not _reset_done:
+        if not self._reset_done:
             self.reset_network()
         else:
             if input_name is None:
