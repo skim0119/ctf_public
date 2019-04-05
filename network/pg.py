@@ -3,7 +3,7 @@
 This module contains classes and definition to assist building policy graient model.
 
 Fuctions:
-    build_loss (list:Tensor, list:Tensor, list:Tensor): 
+    build_loss (list:Tensor, list:Tensor, list:Tensor):
         Returns the actor loss, critic loss, and entropy.
 
 Todo:
@@ -19,6 +19,7 @@ import numpy as np
 
 from utility.utils import store_args
 
+
 class Loss:
     """Loss
 
@@ -29,20 +30,22 @@ class Loss:
     """
 
     @staticmethod
-    def softmax_cross_entropy_selection(softmax_logit, action, reward,
+    def softmax_cross_entropy_selection(logits, action, reward,
                                         td_target, critic,
                                         entropy_beta=0, critic_beta=0,
                                         actor_weight=None, critic_weight=None,
                                         name_scope='loss'):
         with tf.name_scope(name_scope):
-            entropy = -tf.reduce_mean(softmax_logit * tf.log(softmax_logit), name='entropy')
+            entropy = -tf.reduce_mean(logits * tf.log(logits), name='entropy')
             critic_loss = Loss._td_difference(td_target, critic, critic_weight)
-            actor_loss = Loss._softmax_cross_entropy(softmax_logit, action, reward, actor_weight)
+            actor_loss = Loss._softmax_cross_entropy(logits, action, reward, actor_weight)
 
             if entropy_beta != 0:
-                actor_loss += tf.stop_gradient(entropy_beta * entropy)
+                raise NotImplementedError
+                # actor_loss += tf.stop_gradient(entropy_beta * entropy)
             if critic_beta != 0:
-                actor_loss += tf.stop_gradient(critic_beta * critic_loss)
+                raise NotImplementedError
+                # actor_loss += tf.stop_gradient(critic_beta * critic_loss)
 
         return actor_loss, critic_loss, entropy
 
@@ -62,12 +65,13 @@ class Loss:
             action_size = tf.shape(softmax)[1]
             action_OH = tf.one_hot(action, action_size)
             obj_func = tf.log(tf.reduce_sum(softmax * action_OH, 1))
-            exp_v = obj_func * reward 
-            actor_loss = tf.reduce_mean(-exp_v, name='actor_loss') 
+            exp_v = obj_func * reward
+            actor_loss = tf.reduce_mean(-exp_v, name='actor_loss')
         else:
             raise NotImplementedError
 
         return actor_loss
+
 
 class Backpropagation:
     """Asynchronous training pipelines"""

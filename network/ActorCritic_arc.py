@@ -52,7 +52,7 @@ class ActorCritic:
                  critic_beta=1.0,
                  sess=None,
                  global_network=None,
-                 separate_train=False):
+                 separate_train=True):
         """ Initialize AC network and required parameters
 
         Keyword arguments:
@@ -86,18 +86,6 @@ class ActorCritic:
             # Learning Rate Variables
             self.lr_actor = lr_actor
             self.lr_critic = lr_critic
-            # self.lr_actor = tf.train.exponential_decay(lr_actor,
-            #                                           self.local_step,
-            #                                           lr_a_step,
-            #                                           lr_a_gamma,
-            #                                           staircase=True,
-            #                                           name='lr_actor')
-            # self.lr_critic = tf.train.exponential_decay(lr_critic,
-            #                                            self.local_step,
-            #                                            lr_c_step,
-            #                                            lr_c_gamma,
-            #                                            staircase=True,
-            #                                            name='lr_critic')
 
             # global Network
             # Build actor and critic network weights. (global network does not need training sequence)
@@ -130,8 +118,6 @@ class ActorCritic:
                 self.td_target_ = tf.placeholder(
                     shape=[None], dtype=tf.float32, name='td_target_holder')
                 self.advantage_ = tf.placeholder(shape=[None], dtype=tf.float32, name='adv_holder')
-#                 self.likelihood_ = tf.placeholder(shape[None], dtype=tf.float32, name='likelihood_holder')
-#                 self.likelihood_cumprod_ = tf.placeholder(shape[None], dtype=tf.float32, name='likelihood_cumprod_holder')
 
                 with tf.name_scope('train'), tf.device('/gpu:0'):
                     # Critic (value) Loss
@@ -231,19 +217,58 @@ class ActorCritic:
     # Update global network with local gradients
 
     # Choose Action
-    def run_network(self, feed_dict):
+
+    def run_network(self, states):
+        """ run_network
+        Parameters
+        ----------------
+        states : [List/np.array]
+
+        Returns
+        ----------------
+            action : [List]
+            critic : [List]
+        """
+
+        feed_dict = {self.state_input: states}
         a_probs, critic = self.sess.run([self.actor, self.critic], feed_dict)
-        return [np.random.choice(self.action_size, p=prob/sum(prob)) for prob in a_probs], critic
-    
-    def run_sample(self, feed_dict):
+        return [np.random.choice(self.action_size, p=prob / sum(prob)) for prob in a_probs], critic
+
+    def run_sample(self, states):
+        feed_dict = {self.state_input: states}
+        a_probs, critic = self.sess.run([self.actor, self.critic], feed_dict)
         a_probs = self.sess.run(self.actor, feed_dict)
         return a_probs
 
-    def update_global(self, feed_dict):
-        self.sess.run(self.update_ops, feed_dict)
-        al, cl, etrpy = self.sess.run([self.actor_loss, self.critic_loss, self.entropy], feed_dict)
+    def update_global(self, state_input, action, td_target, advantage, log=False):
+        """ update_global
 
-        return al, cl, etrpy
+        Run all update and back-propagation sequence given the necessary inputs.
+
+        Parameters
+        ----------------
+        log : [bool]
+             logging option
+
+        Returns
+        ----------------
+        aloss : [Double]
+        closs : [Double]
+        entropy : [Double]
+        """
+        feed_dict = {self.state_input: state_input,
+                     self.action_: action,
+                     self.td_target_: td_target,
+                     self.advantage_: advantage}
+        self.sess.run(self.update_ops, feed_dict)
+
+        ops = [self.actor_loss, self.critic_loss, self.entropy]
+        aloss, closs, entropy = self.sess.run(ops, feed_dict)
+
+        if log:
+            raise NotImplementedError
+
+        return aloss, closs, entropy
 
     def pull_global(self):
         self.sess.run(self.pull_op)
@@ -333,19 +358,57 @@ class ActorCritic_v2:
 
         return actor, critic, a_vars, c_vars
 
-    def run_network(self, feed_dict):
+    def run_network(self, states):
+        """ run_network
+        Parameters
+        ----------------
+        states : [List/np.array]
+
+        Returns
+        ----------------
+            action : [List]
+            critic : [List]
+        """
+
+        feed_dict = {self.state_input: states}
         a_probs, critic = self.sess.run([self.actor, self.critic], feed_dict)
-        return [np.random.choice(self.action_size, p=prob/sum(prob)) for prob in a_probs], critic
-    
-    def run_sample(self, feed_dict):
+        return [np.random.choice(self.action_size, p=prob / sum(prob)) for prob in a_probs], critic
+
+    def run_sample(self, states):
+        feed_dict = {self.state_input: states}
+        a_probs, critic = self.sess.run([self.actor, self.critic], feed_dict)
         a_probs = self.sess.run(self.actor, feed_dict)
         return a_probs
 
-    def update_global(self, feed_dict):
-        self.sess.run(self.update_ops, feed_dict)
-        al, cl, etrpy = self.sess.run([self.actor_loss, self.critic_loss, self.entropy], feed_dict)
+    def update_global(self, state_input, action, td_target, advantage, log=False):
+        """ update_global
 
-        return al, cl, etrpy
+        Run all update and back-propagation sequence given the necessary inputs.
+
+        Parameters
+        ----------------
+        log : [bool]
+             logging option
+
+        Returns
+        ----------------
+        aloss : [Double]
+        closs : [Double]
+        entropy : [Double]
+        """
+        feed_dict = {self.state_input: state_input,
+                     self.action_: action,
+                     self.td_target_: td_target,
+                     self.advantage_: advantage}
+        self.sess.run(self.update_ops, feed_dict)
+
+        ops = [self.actor_loss, self.critic_loss, self.entropy]
+        aloss, closs, entropy = self.sess.run(ops, feed_dict)
+
+        if log:
+            raise NotImplementedError
+
+        return aloss, closs, entropy
 
     def pull_global(self):
         self.sess.run(self.pull_op)

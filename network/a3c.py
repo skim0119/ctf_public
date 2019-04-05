@@ -58,14 +58,15 @@ class a3c:
             # Local Network
             if trainable:
                 train_args = (self.action_, self.advantage_, self.td_target_)
-                loss = loss(self.actor, *train_args, self.critic, entropy_beta)
+                loss = loss(self.actor, *train_args, self.critic)
                 self.actor_loss, self.critic_loss, self.entropy = loss
 
-                _ = backprop(self.actor_loss, self.critic_loss,
-                             self.a_vars, self.c_vars,
-                             global_network.a_vars, global_network.c_vars,
-                             lr_actor, lr_critic)
-                self.pull_op, self.update_ops = _
+                self.pull_op, self.update_ops = backprop(
+                    self.actor_loss, self.critic_loss,
+                    self.a_vars, self.c_vars,
+                    global_network.a_vars, global_network.c_vars,
+                    lr_actor, lr_critic
+                )
 
         self.merged_summary_op = self._build_summary(self.a_vars + self.c_vars)
 
@@ -100,6 +101,9 @@ class a3c:
             var_name = var.name.replace(":", "_")  # colon (:) is not allowed in TF board
             summaries.append(tf.summary.histogram(var_name, var))
         return tf.summary.merge(summaries)
+
+    def _build_grad_summary(self, vars_list: list, grads_list: list):
+        raise NotImplementedError
 
     def _build_network(self, input_holder):
         """ _build_network
@@ -202,25 +206,37 @@ class ActorCritic(a3c):
     def _build_network(self, input_hold):
         actor_name = self.scope + '/actor'
         critic_name = self.scope + '/critic'
+
         with tf.variable_scope('actor'):
-            net = Deep_layer.conv2d_pool(input_layer=input_hold,
-                                         channels=[32, 64, 64],
-                                         kernels=[5, 3, 2],
-                                         pools=[2, 2, 1],
-                                         strides=[2, 2, 1],
-                                         flatten=True)
+            net = Deep_layer.conv2d_pool(
+                input_layer=input_hold,
+                channels=[32, 64, 64],
+                kernels=[5, 3, 2],
+                pools=[2, 2, 1],
+                strides=[2, 2, 1],
+                flatten=True
+            )
             net = layers.fully_connected(net, 128)
-            actor = layers.fully_connected(net,
-                                           self.action_size,
-                                           weights_initializer=layers.xavier_initializer(),
-                                           biases_initializer=tf.zeros_initializer(),
-                                           activation_fn=tf.nn.softmax)
+            actor = layers.fully_connected(
+                net, self.action_size,
+                weights_initializer=layers.xavier_initializer(),
+                biases_initializer=tf.zeros_initializer(),
+                activation_fn=tf.nn.softmax)
+
         with tf.variable_scope('critic'):
-            critic = layers.fully_connected(net,
-                                            1,
-                                            weights_initializer=layers.xavier_initializer(),
-                                            biases_initializer=tf.zeros_initializer(),
-                                            activation_fn=None)
+            net = Deep_layer.conv2d_pool(
+                input_layer=input_hold,
+                channels=[32, 64],
+                kernels=[3, 2],
+                pools=[2, 2],
+                strides=[2, 1],
+                flatten=True
+            )
+            critic = layers.fully_connected(
+                net, 1,
+                weights_initializer=layers.xavier_initializer(),
+                biases_initializer=tf.zeros_initializer(),
+                activation_fn=None)
             critic = tf.reshape(critic, [-1])
 
         a_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=actor_name)
