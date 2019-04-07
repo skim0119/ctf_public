@@ -52,7 +52,7 @@ class ActorCritic:
                  critic_beta=1.0,
                  sess=None,
                  global_network=None,
-                 separate_train=True):
+                 separate_train=False):
         """ Initialize AC network and required parameters
 
         Keyword arguments:
@@ -277,6 +277,7 @@ class ActorCritic:
     def get_vars(self):
         return self.a_vars + self.c_vars
 
+
 class ActorCritic_v2:
     """Actor Critic Network Implementation for A3C (Tensorflow)
 
@@ -327,17 +328,16 @@ class ActorCritic_v2:
                 summaries = []
                 #for var in tf.trainable_variables(scope=scope):
                 for var in self.a_vars + self.c_vars:
-                    var_name = var.name.replace(":","_")
+                    var_name = var.name.replace(":", "_")
                     summaries.append(tf.summary.histogram(var_name, var))
                 self.merged_summary_op = tf.summary.merge(summaries)
-                
 
     def _build_network(self, input_ph):
         with tf.variable_scope('actor'):
             net = Deep_layer.conv2d_pool(input_layer=input_ph,
-                                         channels=[32,64,64],
-                                         kernels=[5,3,2],
-                                         pools=[2,2,1],
+                                         channels=[32, 64, 64],
+                                         kernels=[5, 3, 2],
+                                         pools=[2, 2, 1],
                                          flatten=True)
             net = layers.fully_connected(net, 128)
             actor = layers.fully_connected(net,

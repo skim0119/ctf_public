@@ -49,7 +49,7 @@ class PolicyGen:
         Initiate session
         """
 
-        self.input_shape = 19
+        self.input_shape = 9
 
         # Switches
         self.deterministic = False
@@ -60,7 +60,6 @@ class PolicyGen:
         self.input_name = input_name
         self.output_name = output_name
         self._reset_done = False
-        #self.reset_network(self.input_name, self.output_name, import_scope)
 
     def gen_action(self, agent_list, observation, free_map=None):
         """Action generation method.
@@ -80,6 +79,8 @@ class PolicyGen:
             The graph is not updated in this session.
             It only returns action for given input.
         """
+        if not self._reset_done:
+            self.reset_network_weight()
 
         obs = one_hot_encoder(observation, agent_list, self.input_shape, reverse=not self.is_blue)
         action_prob = self.sess.run(self.action, feed_dict={self.state: obs})  # Action Probability
@@ -96,6 +97,7 @@ class PolicyGen:
     def reset_network_weight(self, input_name=None, output_name=None):
         if not self._reset_done:
             self.reset_network()
+            self._reset_done = True
         else:
             if input_name is None:
                 input_name = self.input_name
@@ -109,9 +111,11 @@ class PolicyGen:
 
     def reset_network(self, input_name=None, output_name=None, scope=None):
         """reset_network
+        Initialize network and TF graph
         """
         if input_name is None:
             input_name = self.input_name
+
         if output_name is None:
             output_name = self.output_name
 
@@ -121,8 +125,8 @@ class PolicyGen:
         if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
             print(f'path exist : {ckpt.model_checkpoint_path}')
             self.graph = tf.Graph()
-            self.sess = tf.Session(graph=self.graph)
             with self.graph.as_default():
+                self.sess = tf.Session()
                 self.saver = tf.train.import_meta_graph(ckpt.model_checkpoint_path + '.meta', import_scope=scope, clear_devices=True)
                 self.saver.restore(self.sess, ckpt.model_checkpoint_path)
                 #print([n.name for n in self.graph.as_graph_def().node])

@@ -101,8 +101,9 @@ class Tensor_logger:
         merged_summary_op = tf.summary.merge_all()'''
         pass
 
+
 class Tensorboard_utility:
-    @staticmethod 
+    @staticmethod
     def scalar_logger(tag, value, step, writer):
         """
         Log a single scalar variable.
@@ -125,24 +126,26 @@ class Tensorboard_utility:
         writer.add_summary(summary, step)
 
     @staticmethod
-    def variable_statistic_logger(var, include_min=False, include_max=False, mean=True, 
-            std=False, histogram=False, name_scope='summaries'):
-        """ 
+    def variable_statistic_logger(
+        var, include_min=False, include_max=False, mean=True,
+        std=False, histogram=False, name_scope='summaries'
+    ):
+        """
         Log variable statistic for a Tensorboard visualization
 
         Parameters
         ----------------
 
-        var : [Tensor] 
+        var : [Tensor]
              Scalar variable
 
-        include_min, include_max, mean, std : [bool] 
+        include_min, include_max, mean, std : [bool]
             Toggle which statistic to include
 
         histogram : [bool]
             Toggle to include histogram
 
-        name_scope : [string] 
+        name_scope : [string]
 
         Returns
         ----------------

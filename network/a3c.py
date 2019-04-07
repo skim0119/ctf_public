@@ -144,9 +144,7 @@ class a3c:
 
     def run_sample(self, states):
         feed_dict = {self.state_input: states}
-        a_probs, critic = self.sess.run([self.actor, self.critic], feed_dict)
-        a_probs = self.sess.run(self.actor, feed_dict)
-        return a_probs
+        return self.sess.run([self.actor, self.critic], feed_dict)
 
     def update_global(self, state_input, action, td_target, advantage, log=False):
         """ update_global
@@ -196,12 +194,14 @@ class ActorCritic(a3c):
     def __init__(self, in_size, action_size, scope,
                  lr_actor=1e-4, lr_critic=1e-4,
                  entropy_beta=0.001,
-                 sess=None, global_network=None):
+                 sess=None, global_network=None,
+                 **kwargs):
         """ Initialize AC network and required parameters """
         super(ActorCritic, self).__init__(
             in_size, action_size, scope,
             lr_actor, lr_critic,
-            entropy_beta, sess, global_network)
+            entropy_beta, sess, global_network,
+            **kwargs)
 
     def _build_network(self, input_hold):
         actor_name = self.scope + '/actor'
@@ -213,7 +213,6 @@ class ActorCritic(a3c):
                 channels=[32, 64, 64],
                 kernels=[5, 3, 2],
                 pools=[2, 2, 1],
-                strides=[2, 2, 1],
                 flatten=True
             )
             net = layers.fully_connected(net, 128)
@@ -229,7 +228,6 @@ class ActorCritic(a3c):
                 channels=[32, 64],
                 kernels=[3, 2],
                 pools=[2, 2],
-                strides=[2, 1],
                 flatten=True
             )
             critic = layers.fully_connected(

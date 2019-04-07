@@ -1,10 +1,3 @@
-import numpy as np
-import random
-import scipy.signal
-
-import inspect
-import functools
-
 """Utility methods and classes used in CtF Problem
 
 This module contains extra features and functions frequently used in Ctf Project.
@@ -38,12 +31,20 @@ Todo:
     * If necessary, include __main__ in module for debuging and quick operation checking
 
 """
+import random
 
-# Decorator to automatically set parameters as a class variables
+import inspect
+import functools
+
+import numpy as np
+import scipy.signal
 
 
 def store_args(method):
     """Stores provided method args as instance attributes.
+
+    Decorator to automatically set parameters as a class variables
+
     """
     argspec = inspect.getfullargspec(method)
     defaults = {}
@@ -69,7 +70,7 @@ def store_args(method):
     return wrapper
 
 
-def discount_rewards(rewards, gamma, normalize=False, mask_array=None):
+def discount_rewards(rewards, gamma, normalized=False, mask_array=None):
     """ take 1D float numpy array of rewards and compute discounted reward
 
     Args:
@@ -92,10 +93,11 @@ def discount_rewards(rewards, gamma, normalize=False, mask_array=None):
             adv.append(y)
         disc_r = np.array(adv)[::-1]
 
-        if normalize:
+        if normalized:
             disc_r = (disc_r - np.mean(disc_r)) / (np.std(disc_r) + 1e-13)
 
         return disc_r
+
 
 def q_retrace(reward, value_ext, gamma, is_weight):
     retrace_weight = np.minimum(1.0, is_weight)
@@ -103,7 +105,7 @@ def q_retrace(reward, value_ext, gamma, is_weight):
     value = value_ext[:-1]
     qret = value_ext[-1]
     qrets = []
-    for i in range(len(is_weight)- 1, -1, -1):
+    for i in range(len(is_weight) - 1, -1, -1):
         qret = reward[i] + gamma * qret
         qrets.append(qret)
         qret = (retrace_weight[i] * (qret - td_target[i])) + value[i]
