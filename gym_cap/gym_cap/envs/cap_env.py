@@ -52,6 +52,24 @@ class CapEnv(gym.Env):
         self.sparse_reward = False
         self.info = defaultdict(list)
 
+    def __call__(self):
+        print("---- String Representation of Environment ----")
+        print("map objects : ")
+        print(f"  Blue : {self.num_blue_ugv} ground, {self.num_blue_uav} air")
+        print(f"  Red  : {self.num_red_ugv} ground, {self.num_red_uav} air")
+        print("settings : ")
+
+        if STOCH_ATTACK: print("  Stochastic Attack On")
+        else: print("    Stochastic Attack Off")
+
+        if STOCH_ZONES: print("  Stochastic Map On")
+        else: print("  Stochastic Map Off")
+        if self.red_partial_visibility: print("  Red operates under partial vision")
+        else: print("  Red operates under full vision")
+
+        if self.sparse_reward: print("  Sparse Reward")
+        else: print("  Dense Reward")
+
     def reset(self, map_size=None, mode="random", policy_blue=None, policy_red=None):
         """
         Resets the game
