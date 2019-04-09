@@ -7,6 +7,7 @@ Fuctions:
         Returns the actor loss, critic loss, and entropy.
 
 Todo:
+    * Try to use tf.nn.softmax_cross_entropy_with_logits(labels=y_,logits=y)
     * Try to create general policy gradient module
     * Autopep8
     * Docstrings
@@ -50,6 +51,10 @@ class Loss:
         return actor_loss, critic_loss, entropy
 
     @staticmethod
+    def _log(val):
+        return tf.log(tf.clip_by_value(val, 1e-10, 10.0))
+
+    @staticmethod
     def _td_difference(target, critic, critic_weight=None):
         if critic_weight is None:
             td_error = target - critic
@@ -64,7 +69,7 @@ class Loss:
         if actor_weight is None:
             action_size = tf.shape(softmax)[1]
             action_OH = tf.one_hot(action, action_size)
-            obj_func = tf.log(tf.reduce_sum(softmax * action_OH, 1))
+            obj_func = Loss._log(tf.reduce_sum(softmax * action_OH, 1))
             exp_v = obj_func * reward
             actor_loss = tf.reduce_mean(-exp_v, name='actor_loss')
         else:
