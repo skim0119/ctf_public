@@ -54,7 +54,7 @@ class Run_Param:
     critic_lr = 2e-4
 
     # Environment Configuration
-    map_size = 20
+    map_size = 30
     num_blue = 5
     num_red = 5
 
@@ -72,6 +72,7 @@ class Worker(Run_Param):
             self, name, global_network, sess,
             global_episodes=None, increment_step_op=None,
             progbar=None,
+            selfplay=True, model_path=None,
             **kwargs
     ):
         Run_Param.__init__(self, kwargs)
@@ -92,7 +93,10 @@ class Worker(Run_Param):
         )
         self.env()
 
-        self.policy_red = policy.policy_A3C.PolicyGen(color='red')
+        self.policy_red = policy.policy_A3C.PolicyGen(
+            model_dir=model_path,
+            color='red',
+        )
 
         # Create AC Network for Worker
         self.network = Network(
@@ -118,7 +122,7 @@ class Worker(Run_Param):
             while not coord.should_stop() and global_episodes < self.total_episode:
                 _log = global_episodes % self.log_frequency == 0 and global_episodes != 0
                 _save = global_episodes % self.save_frequency == 0 and global_episodes != 0
-                _selfplay_update = global_episodes > self.save_frequency and int(global_episodes/self.selfplay_update_frequency) > last_update
+                _selfplay_update = self.selfplay and global_episodes > self.save_frequency and int(global_episodes / self.selfplay_update_frequency) > last_update
 
                 r_episode, length = self.rollout(log=_log, writer=writer, episode=global_episodes)
 
@@ -152,7 +156,7 @@ class Worker(Run_Param):
 
                 if _selfplay_update:
                     self.policy_red.reset_network_weight()
-                    last_updat = int(global_episodes/self.selfplay_update_frequency)
+                    last_update = int(global_episodes / self.selfplay_update_frequency)
 
     def rollout(self, log=False, **kwargs):
         def get_reward(env_reward, prev_reward, info, done, mode=None):
@@ -170,7 +174,7 @@ class Worker(Run_Param):
         def get_action(states):
             return self.network.run_network(states)
 
-        if kwargs['episode'] > 60000:
+        if kwargs['episode'] > 60000 and self.selfplay:
             policy_red = self.policy_red
         else:
             policy_red = policy.roomba.PolicyGen(self.env.get_map, self.env.get_team_red)

@@ -37,7 +37,9 @@ class PolicyGen:
                  input_name='global/state:0',
                  output_name='global/actor/fully_connected_1/Softmax:0',
                  color='blue',
-                 import_scope=None
+                 import_scope=None,
+                 *args,
+                 **kwargs
                  ):
         """Constuctor for policy class.
 
