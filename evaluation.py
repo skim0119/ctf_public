@@ -103,7 +103,7 @@ questions = [
         'run_episode',
         message="How many episode to run? (Positive Number)",
         validate=lambda _, x: re.match('^[+]?\d+([.]\d+)?$', x),
-        default=2000,
+        default='2000',
     ),
     inquirer.List(
         'run_partial_red',
@@ -119,19 +119,19 @@ questions = [
         'num_red',
         message="How many RED agents? (Positive Number)",
         validate=lambda _, x: re.match('^[+]?\d+([.]\d+)?$', x),
-        default=4,
+        default='4',
     ),
     inquirer.Text(
         'num_blue',
         message="How many BLUE agents? (Positive Number)",
         validate=lambda _, x: re.match('^[+]?\d+([.]\d+)?$', x),
-        default=4,
+        default='4',
     ),
     inquirer.Text(
         'map_size',
         message="Map Size? (Positive Number)",
         validate=lambda _, x: re.match('^[+]?\d+([.]\d+)?$', x),
-        default=20,
+        default='20',
     ),
     inquirer.Text(
         'run_name',
