@@ -33,7 +33,7 @@ class PolicyGen:
     """
 
     def __init__(self,
-                 model_dir='./model/A3C_benchmark/',
+                 model_dir='./policy/A3C_model/',
                  input_name='global/state:0',
                  output_name='global/actor/fully_connected_1/Softmax:0',
                  color='blue',
