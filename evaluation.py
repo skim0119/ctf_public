@@ -23,6 +23,7 @@ import policy.random
 import policy.roomba
 import policy.zeros
 import policy.policy_A3C
+import policy.policy_ensemble
 
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -34,8 +35,8 @@ from tqdm import tqdm
 
 MAX_LENGTH = 150
 
-BUILT_POLICIES = ['roomba', 'random', 'zeros', 'A3C']
-POLICIES = [policy.roomba, policy.random, policy.zeros, policy.policy_A3C]
+BUILT_POLICIES = ['roomba', 'random', 'zeros', 'A3C', 'A3C_ensemble']
+POLICIES = [policy.roomba, policy.random, policy.zeros, policy.policy_A3C, policy.policy_ensemble]
 
 questions = [
     inquirer.List(
@@ -56,7 +57,7 @@ policy_blue = POLICIES[BUILT_POLICIES.index(answers['blue_policy'])]
 
 # Environment
 env = gym.make("cap-v0").unwrapped  # initialize the environment
-ls_a3c = os.listdir('model')
+ls_a3c = ['default'] + os.listdir('model')
 # Set Red Policy
 if answers['red_policy'] == 'A3C':
     questions = [
@@ -67,10 +68,13 @@ if answers['red_policy'] == 'A3C':
         ),
     ]
     a3c_choice = inquirer.prompt(questions)
-    policy_red = policy_red.PolicyGen(
-        model_dir='./model/' + a3c_choice['path'],
-        color='red'
-    )
+    if a3c_choice['path'] == 'default':
+        policy_red = policy_red.PolicyGen(color='red')
+    else:
+        policy_red = policy_red.PolicyGen(
+            model_dir='./model/' + a3c_choice['path'],
+            color='red'
+        )
 else:
     policy_red = policy_red.PolicyGen(env.get_map, env.get_team_red)
 
@@ -84,7 +88,10 @@ if answers['blue_policy'] == 'A3C':
         ),
     ]
     a3c_choice = inquirer.prompt(questions)
-    policy_blue = policy_blue.PolicyGen(model_dir='./model/' + a3c_choice['path'])
+    if a3c_choice['path'] == 'default':
+        policy_blue = policy_blue.PolicyGen()
+    else:
+        policy_blue = policy_blue.PolicyGen(model_dir='./model/' + a3c_choice['path'])
 else:
     policy_blue = policy_blue.PolicyGen(env.get_map, env.get_team_blue)
 
@@ -96,6 +103,7 @@ questions = [
         'run_episode',
         message="How many episode to run? (Positive Number)",
         validate=lambda _, x: re.match('^[+]?\d+([.]\d+)?$', x),
+        default=2000,
     ),
     inquirer.List(
         'run_partial_red',
@@ -111,16 +119,19 @@ questions = [
         'num_red',
         message="How many RED agents? (Positive Number)",
         validate=lambda _, x: re.match('^[+]?\d+([.]\d+)?$', x),
+        default=4,
     ),
     inquirer.Text(
         'num_blue',
         message="How many BLUE agents? (Positive Number)",
         validate=lambda _, x: re.match('^[+]?\d+([.]\d+)?$', x),
+        default=4,
     ),
     inquirer.Text(
         'map_size',
         message="Map Size? (Positive Number)",
         validate=lambda _, x: re.match('^[+]?\d+([.]\d+)?$', x),
+        default=20,
     ),
     inquirer.Text(
         'run_name',
@@ -209,7 +220,7 @@ for name in data_column:
     plt.title(name + f' (evaluation {data[name].mean()})')
     plt.xlabel('episode')
     plt.ylabel(name)
-    #ax.fill_between(x=data["index"], y1=data["down"], y2=data["up"], alpha=0.3)
+    #  ax.fill_between(x=data["index"], y1=data["down"], y2=data["up"], alpha=0.3)
 
     try:
         save_path = path + '/' + name + '.png'
