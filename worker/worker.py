@@ -21,6 +21,7 @@ from network.base import Tensorboard_utility as TB
 #   - Fix out-source keyward parameters
 # - Try full trace of the session run
 # - Add post-reward-shaping module
+# - Reward shaping: return dictionary for various policy for each agent
 
 
 class Run_Param:
@@ -109,6 +110,9 @@ class Worker(Run_Param):
             global_network=global_network
         )
 
+        # Reward Shape
+        self.reward_mode = kwargs.get('reward_mode',None)
+
     def work(self, saver, writer, coord, recorder=None, model_path=None):
         # Shared Utility
         global_rewards = recorder['reward']
@@ -158,19 +162,45 @@ class Worker(Run_Param):
                     self.policy_red.reset_network_weight()
                     last_update = int(global_episodes / self.selfplay_update_frequency)
 
-    def rollout(self, log=False, **kwargs):
-        def get_reward(env_reward, prev_reward, info, done, mode=None):
-            if mode is None:
-                reward = (env_reward - prev_reward - 0.5) / 100
-            if mode == 'Navigate':
-                if info['red_flag_caught'][-1]:
-                    reward = 1
-                elif done:
-                    reward = -1
-                else:
-                    reward = 0
-            return reward
+    def get_reward(self, env_reward, prev_reward, info, done):
+        """ get_reward
 
+        Reward shaping with different modes
+
+        Parameters
+        ----------------
+
+        env_reward
+        prev_reward
+        info
+        done
+
+        Returns
+        ----------------
+        reward : [int]
+        """
+        mode = self.reward_mode
+        reward = (env_reward - prev_reward - 0.5) / 100  # default
+
+        if mode == 'Navigate':
+            if info['red_flag_caught'][-1]:
+                reward = 1
+            elif done:
+                reward = -1
+            else:
+                reward = 0
+        elif mode == 'Attack':
+            if len(info['red_alive']) <= 1:
+                reward = 0
+            else:
+                initial_num_enemy = sum(info['red_alive'][0])
+                prev_num_enemy = sum(info['red_alive'][-2])
+                num_enemy = sum(info['red_alive'][-1])
+                reward = int(prev_num_enemy - num_enemy)/initial_num_enemy
+        return reward
+
+
+    def rollout(self, log=False, **kwargs):
         def get_action(states):
             return self.network.run_network(states)
 
@@ -197,7 +227,7 @@ class Worker(Run_Param):
             s1, rc, done, info = self.env.step(a)
             s1 = preprocess(self.env._env, self.env.get_team_blue, self.vision_range)
 
-            r = get_reward(rc, prev_r, info, done)
+            r = self.get_reward(rc, prev_r, info, done)
             if step == self.max_frame and not done:
                 # Impose hard limit in time
                 r = -1
