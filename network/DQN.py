@@ -6,6 +6,7 @@ import random
 
 import utility
 
+
 class DQN:
     """Deep Q-Network Implementation for multi-agent usage
 
@@ -13,15 +14,13 @@ class DQN:
 
     Attributes:
         @ Private
-        _build_Q_network: 
+        _build_Q_network:
         _build_training:
 
         @ Public
         run_network:
         update_target:
         pull_global:
-        
-
     Todo:
         pass
 
@@ -57,7 +56,7 @@ class DQN:
         """
 
         # Class Environment
-        self.sess=sess
+        self.sess = sess
         if target_network is None:
             self.target_network = self
             self.tau = 1.0
@@ -130,7 +129,7 @@ class DQN:
         Build training sequence for DQN
         Use mask to deprecate dead agency
         """
-        self.targetQ_ = tf.placeholder(shape=[None],dtype=tf.float32)
+        self.targetQ_ = tf.placeholder(shape=[None], dtype=tf.float32)
         self.action_ = tf.placeholder(shape=[None, self.num_agent],dtype=tf.int32)
         self.mask_ = tf.placeholder(shape=[None, self.num_agent], dtype=tf.float32)
 
@@ -142,6 +141,7 @@ class DQN:
         with tf.name_scope('Q_train'):
             self.td_error = tf.square(self.targetQ_-self.Q_sum)
             self.loss = tf.reduce_mean(self.td_error)
+            self.entropy = -tf.reduce_sum(tf.nn.softmax(self.Qout) * tf.log(tf.nn.softmax(self.Qout)))
             self.grads = tf.gradients(self.loss, self.graph_vars)
 
         self.update= self.trainer.apply_gradients(zip(self.grads, self.graph_vars))
@@ -174,8 +174,8 @@ class DQN:
                      self.targetQ_ : targetQ,
                      self.action_ : actions,
                      self.mask_ : masks}
-        loss, _ = self.sess.run([self.loss, self.update], feed_dict)
+        loss, entropy, _ = self.sess.run([self.loss, self.entropy, self.update], feed_dict)
 
         self.sess.run(self.op_push)
 
-        return loss
+        return loss, entropy
